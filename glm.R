@@ -45,7 +45,7 @@ summary(gavote$votes) # varies greatly
 
 
 #
-#### fitting for a linear model (Least Squared Estimate) ####
+#### fitting a linear model (Least Squared Estimate) ####
 lmod = lm(undercount ~ pergore+perAA, gavote)
 coef(lmod)
 
@@ -179,7 +179,7 @@ termplot(blmodi, partial = TRUE, terms = 2)
 # from a constant fit.
 
 
-#### Variables selection ####
+#### Variables selection: AIC ####
 
 # let's build a big linear model:
 # (all main effects + all two-way between qualitative + all two-way between a quali and a quanti)
@@ -188,3 +188,57 @@ biglm = lm(undercount ~ (equip+econ+rural+atlanta)^2 +
 
 # Then, using the "step" command. This will implement a stepwise search strategy
 # to minimise the AIC
+
+smallm = step(biglm, trace = F)
+
+# automated approach does not always give the best answer
+# we know that the proportion for Gore is correlated with the undercount
+# but it is eliminated from the model.
+# If the idea is to get an explanation, one can use a more manual approach
+# that takes into account background information
+
+
+#### Variables selection: testing based approach ####
+# the F-test approach is considered more inferior than using the criterion-based method
+# but it's applicability across a wide class of models is nice.
+
+# let's compare the model from AIC-method above with the model with one fewer term:
+drop1(smallm, test = "F")
+
+# we can remove rural:perAA
+finalm = lm(undercount ~ equip + econ + perAA +
+              equip:econ + equip:perAA, gavote)
+summary(finalm)
+# eek... the interactions make it difficult to interpret
+
+#### Interpreting Interactions ####
+
+# it's often helpful to construct predictions for all levels of variables involved
+# so, here we generate all combinations of equip and con for a median proportion of perAA:
+pdf = data.frame(econ = rep(levels(gavote$econ), 5),
+                 equip = rep(levels(gavote$equip), rep(3,5)), perAA = 0.233)
+
+# we now compute predicted undercount for all 15 combi
+pp = predict(finalm, new=pdf)
+
+xtabs(round(pp,3) ~ econ + equip, pdf)
+# poorer counties had higher undercount
+# paper prediction in rich counties is nonsense, because there is no such counties
+
+
+# we can do the same approach for perAA:equip
+pdf = data.frame(econ=rep("middle",15),
+           equip=rep(levels(gavote$equip),rep(3,5)),
+           perAA=rep(c(.11,0.23,0.35),5))
+
+pp = predict(finalm, new=pdf)
+
+propAA <- gl(3,1,15,labels=c("low","medium", "high"))
+xtabs(round(pp,3) ~ propAA + equip, pdf)
+# geez... this is so messy
+
+
+#### CH1 Exercise ####
+# page 27
+
+
