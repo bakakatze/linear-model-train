@@ -1,6 +1,14 @@
+## Tutorial for Linear Model and its extension by Faraway (2006)
 
+library(dplyr)
+library(tidyr)
 library(faraway)
+library(MASS)
+library(splines)
+library(ggplot2)
 
+#
+#### Data Overview #####
 data(gavote)
 
 head(gavote)
@@ -25,7 +33,19 @@ nix = c(3,10,11,12)
 cor(gavote[,nix])
 
 
-#### fitting for a linear model (LSE) ####
+## plots for undercounts
+boxplot(gavote$undercount) # 2 extreme outliers
+
+gavote %>%
+  filter(undercount > 0.12)
+
+
+## summary of counties' sizes
+summary(gavote$votes) # varies greatly
+
+
+#
+#### fitting for a linear model (Least Squared Estimate) ####
 lmod = lm(undercount ~ pergore+perAA, gavote)
 coef(lmod)
 
@@ -103,8 +123,68 @@ termplot(lmodi, partial = TRUE, terms=1)
 # and the response. In this case: there is a linear relationship
 # no need to do transformation
 
-#### robust regression ####
+#### Robust Regression ####
 
 # least squares method works well when the errors are normal, but is poor
-# if the errors are long-tailed
+# if the errors are long-tailed.
+# Alternative: downweights the effect of larger errors (Huber Method (default))
 
+require(MASS)
+
+rlmodi = rlm(undercount ~ cperAA + cpergore*rural + equip, gavote)
+summary(rlmodi)
+
+# not equipOS-PC is about half the size of the "lmodi" model
+
+#### Weighted Least Squares ####
+# because the number of population across different counties varies greatly and
+# we expect smaller counties to have higher variance, we can assign weights based on ballots size (pop size)
+
+wlmodi = lm(undercount ~ cperAA + cpergore*rural + equip, data = gavote, weights = ballots)
+summary(wlmodi)
+# the residual standard error becomes too large
+# may not be a good idea to use WLS
+
+#### Transformation ####
+
+# different types of transformation (i.e. box-cox)
+# but fancy transformation makes interpretation difficult
+# However, transforming predictors variable is less problematic and we'll see here:
+
+# transform the proportion of african american using orthogonal polynomial transformation
+plmodi = lm(undercount ~ poly(cperAA,4) + cpergore*rural + equip, gavote)
+summary(plmodi)
+
+# with standard polynomials, elimination of one term would cause a change in the values
+# of the remaining coefficients.
+# However, this is not the case with orthogonal polynomials. The lower order term did not change
+# even if we remove the higher order term.
+
+termplot(plmodi, partial = TRUE, terms = 1)
+
+termplot(lmodi, partial = TRUE, terms = 1)
+
+# these show that quadratic polynomial is not so different from constant fit
+# explaining the lack of significance
+
+# next we can try piecewise polynomials (splines)
+# this is more stable compared with orthogonal polynomials
+require(splines)
+
+# use cubic B-splines:
+blmodi = lm(undercount ~ cperAA + bs(cpergore,4) + rural + equip, gavote)
+
+termplot(blmodi, partial = TRUE, terms = 2)
+# again this is just an example using 4 degrees of freedom, in fact it's not that different
+# from a constant fit.
+
+
+#### Variables selection ####
+
+# let's build a big linear model:
+# (all main effects + all two-way between qualitative + all two-way between a quali and a quanti)
+biglm = lm(undercount ~ (equip+econ+rural+atlanta)^2 +
+             (equip+econ+rural+atlanta) * (perAA+pergore), gavote)
+
+# Then, using the "step" command. This will implement a stepwise search strategy
+# to minimise the AIC
