@@ -8,7 +8,7 @@ library(splines)
 library(ggplot2)
 
 #
-#### Data Overview #####
+#### CH1: Introduction & data overview #####
 data(gavote)
 
 head(gavote)
@@ -239,6 +239,122 @@ xtabs(round(pp,3) ~ propAA + equip, pdf)
 
 
 #### CH1 Exercise ####
-# page 27
 
 
+data(swiss)
+
+head(swiss)
+
+lfert = lm(Fertility ~ Agriculture + Examination + Education + Catholic + Infant.Mortality,
+           data = swiss)
+summary(lfert)
+plot(lfert)
+
+
+drop1(lfert, test = "F") # the examination variable look horrible
+
+termplot(lfert, partial = TRUE, terms=4) # lol... catholics...
+
+# drop Examination
+lfert1 = lm(Fertility ~ Agriculture + Education + Infant.Mortality + Catholic, data = swiss)
+summary(lfert1)
+
+rfert = rlm(Fertility ~ Agriculture + Education + Infant.Mortality + Catholic, data = swiss)
+summary(rfert)
+
+#
+#### CH2: Binomial Dat ####
+
+data(orings)
+head(orings)
+
+plot(damage/6 ~ temp, orings)
+
+# we want to predict the probability of failure in a given O-ring
+# in relation to launch temperature and predict the outcome probability when
+# T = 32F
+
+# a naive way is to use linear model (LOL):
+lmod = lm(damage/6 ~ temp, orings)
+abline(lmod)
+
+# not a good idea
+
+
+#### binomial logistic regression (applying link function) ####
+
+orings$not_damaged = 6-orings$damage
+
+logitmod = glm(cbind(damage, not_damaged) ~ temp, family = binomial, orings)
+summary(logitmod)
+
+plot(damage/6 ~ temp, orings, xlim=c(25,85), ylim = c(0,1))
+x = seq(25,85,1)
+lines(x, ilogit(11.6630-0.2162*x))
+
+#
+#### compare this with Probit link #####
+
+probitmod = glm(cbind(damage,not_damaged) ~ temp, family = binomial(link=probit), orings)
+summary(probitmod)
+
+lines(x, pnorm(5.5915 - 0.1058*x), lty = 2)
+
+# both are quire similar
+# we can predict the response at 31 F:
+ilogit(11.6630 - 0.2162*31)
+pnorm(5.5915-0.1058*31)
+
+# the probability of failure at 31 F is too high
+
+
+#### but we need to test for deviance first #####
+
+# recall
+summary(logitmod)
+
+pchisq(deviance(logitmod), df.residual(logitmod), lower = FALSE)
+# >0.05 the more saturated model is better
+
+pchisq(38.898, 22, lower = FALSE)
+# the null model not so much
+
+## we can also compare the two model:
+## this is a better approach in testing which model is better over sigle deviance test
+pchisq(38.9 - 16.9, 1, lower = FALSE)
+# which is very small = thus we can conclude that launch temperature is statistically significant
+
+# deviance-based test is preferred over z-test
+# with sparse data, the SE can be overestimated and the z-test becomes too small
+# This is known as Hauck-Donner effect
+
+
+## the confidence interval can be constructed using normal approximations:
+confint(logitmod) 
+# WARNING!!: need to load MASS package first, otherwise the default method for
+# ordinary linear models will be used (which is not quite right)
+
+# you can also do the same thing for probit model
+# they both are strikingly similar model (no need to go deeper at this stage)
+
+#### odds ratio ####
+
+data(babyfood)
+xtabs(disease/(disease+nondisease) ~ sex + food, babyfood)
+# this xtab show the difference in the prob of respiratory conditions
+# between: breasfed, bottle-fed, and breast with supplements
+
+## let's fit the model
+mdl = glm(cbind(disease, nondisease) ~ sex + food, family = binomial, babyfood)
+summary(mdl)
+# as we can see from the residual deviance (small), no evidence of interaction
+
+drop1(mdl, test = "Chi")
+
+# let's compute the OR and the confidence interval
+exp(coef(mdl))
+exp(confint(mdl))
+
+#
+#### prospective vs. retrospective sampling ####
+# page 38
