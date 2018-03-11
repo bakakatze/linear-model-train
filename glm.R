@@ -6,9 +6,10 @@ library(faraway)
 library(MASS)
 library(splines)
 library(ggplot2)
+library(survival)
 
 #
-#### CH1: Introduction & data overview #####
+##### CH1: Introduction & data overview #####
 data(gavote)
 
 head(gavote)
@@ -263,7 +264,7 @@ rfert = rlm(Fertility ~ Agriculture + Education + Infant.Mortality + Catholic, d
 summary(rfert)
 
 #
-#### CH2: Binomial Dat ####
+##### CH2: Binomial Dat ####
 
 data(orings)
 head(orings)
@@ -356,5 +357,177 @@ exp(coef(mdl))
 exp(confint(mdl))
 
 #
-#### prospective vs. retrospective sampling ####
-# page 38
+#### link functions ####
+# usuall the choice is made based on physical knowledge or simple convenience
+# let's contrusct the three link functions:
+
+data(bliss)
+bliss # insect dying at different concentration of insectiside
+
+modl = glm(cbind(dead, alive) ~ conc, family = binomial, data = bliss)
+modp = glm(cbind(dead, alive) ~ conc, family = binomial(link = probit), data = bliss)
+modc = glm(cbind(dead, alive) ~ conc, family = binomial(link = cloglog), data = bliss)
+
+fitted(modl) # this is the inverse logit of the linear predictors, just so that we got the probability back
+
+# let's compare the logit, probit and complementary log-log fits:
+cbind(fitted(modl), fitted(modp), fitted(modc))
+
+# not much different, but let's see at a wider range
+x = seq(-2,8,0.2)
+
+pl = ilogit(modl$coef[1] + modl$coef[2]*x)
+pp = pnorm(modp$coef[1] + modp$coef[2]*x)
+pc = 1-exp(-exp(modc$coef[1] + modc$coef[2]*x))
+
+plot(x, pl, type = "l", ylab = "Probability", xlab = "Dose")
+lines(x,pp,lty=2)
+lines(x,pc,lty=4)
+
+# let's look at the relative different
+# black lines = lower tail ratio
+# red dashed lines = upper tail ratio
+matplot(x,cbind(pp/pl,(1-pp)/(1-pl)),type="l",xlab="Dose",ylab="Ratio")
+
+matplot(x, cbind(pc/pl, (1-pc)/(1-pl)), type = "l", xlab = "Dose", ylab = "Ratio")
+
+# the problem is that we don't have a tool that can reliably predict
+# at the lower and upper tail of the probability, regardless of the link function
+# For example, it is easy to predict asbestosis where the mine workers are exposed to high concentration
+# however, if we want to predict asbetosis in low-level exposure
+# it is impossible to accurately predict the risk.
+
+# the default choice is the logit link, because:
+# simpler mathematics, easier to interpret and easier analysis of retrospectively sampled data
+
+
+#### Estimation Problem ####
+data(hormone) # urinary adrosterone & etiocholanolone in 26 healthy males
+
+plot(estrogen ~ androgen, data = hormone, pch = as.character(orientation))
+# there seem to be a convergence fail in the middle :O
+
+
+# anyway, let's try to predict orientation based on two urinary hormones
+modl = glm(orientation ~ estrogen + androgen, hormone, family = binomial)
+
+summary(modl)
+# the residual deviance is very small = extremely good fit
+# but none of the predictors are significant due to high SE
+
+#### goodness of fit ####
+
+# using Pearson's chi-squared statistics:
+modl = glm(cbind(dead,alive) ~ conc, family=binomial, data = bliss)
+
+sum(residuals(modl, type = "pearson")^2)
+deviance(modl)
+# as shown here, there is little difference between pearson and deviance statistics
+# although, we need to be careful because the model is fit to minimise the deviance and not the Pearson's X2
+
+# the proportion of variane explained R^2 is a popular measuer of fit for normal linear models.
+# we can apply the same concept to binomial regression by using the proportion of deviance explained
+# however, a better statsitics is due to Naglekerke (1991):
+
+(1-exp((modl$dev-modl$null)/150))/(1-exp(-modl$null/150))
+# n=150, as there are 5 covariate class with 30 observation each
+
+
+#### prediction and effective doses ####
+
+modl = glm(cbind(dead,alive) ~ conc, family=binomial, data = bliss)
+  
+# let's predict the probability of death at dose = 2.5 + it's CI
+pred.modl = predict(modl, newdata = data.frame(conc=2.5), se=T)
+
+ilogit(c(pred.modl$fit - 1.96*pred.modl$se.fit, pred.modl$fit + 1.96*pred.modl$se.fit))
+# confidence interval
+
+## calculate LD50
+ld50 = -modl$coef[1] / modl$coef[2]
+
+# compute the SE using delta method
+dr = c(-1/modl$coef[2],modl$coef[1]/modl$coef[2]^2)
+se = sqrt(dr %*% summary(modl)$cov.un %*% dr)
+
+# so the 95%CI are:
+c(2 - 1.96*se,2 + 1.96*se)
+
+## gosh... need to learn about Taylor Series, jacobian matrix and matrix multiplication
+
+# use MASS package, for simplicity:
+dose.p(modl, p=c(0.5,0.9))
+# using the same principle as the manual approach
+
+
+#### overdispersion ####
+
+# if we do not include the correct term, variable or structure then
+# binomial GLM may be overdispersed
+
+data(troutegg)
+
+bmod = glm(cbind(survive, total-survive) ~ location + period, family = binomial, troutegg)
+summary(bmod)
+
+# check for outliers
+halfnorm(residuals(bmod))
+
+# check for interaction
+elogits = log((troutegg$survive+0.5)/(troutegg$total - troutegg$survive+0.5))
+with(troutegg, interaction.plot(period, location, elogits))
+# interaction plot is always hard to interpret, but from the graph
+# we can conclude that there isn't any significant interaction at play
+
+# now we have excluded the possibility of outliers & interaction
+# we can say that overdispersion is in play here
+
+
+# we can estimate the dispersion parameter:
+sigma2 = sum(residuals(bmod, type="pearson")^2 /12)
+# the square root of dispersion = RSS in gaussian model (linear model)
+# the dispersion parameter calculated above is larget than it would be in the
+# standard binomial GLM (will be discussed later)
+
+drop1(bmod, scale = sigma2, test = "F") # quasi-binomial family
+
+# no goodness of fit test is possible due to free dispersion parameter.
+# we can use the dispersion parameter to scale up the estimates of the SE:
+summary(bmod, dispersion = sigma2)
+
+#
+
+#### matched case-control studies ####
+
+# matched case-control will eliminate the effect of the matched covariates
+# which means, we cannot evaluate the effect of those matched variables
+
+# test data: x-rays with childhood acute myeloid leukemia
+data(amlxray) # matched by age only
+
+# there are only 7 people with down syndrome
+# best to exclude these cases
+ii = which(amlxray$down == "yes")
+ramlxray = amlxray[-c(ii, ii+1),]
+
+
+require(survival)
+cmod = clogit(disease ~ Sex + Mray + Fray + CnRay + strata(ID), data = ramlxray)
+# the strata function indicates matched design
+
+summary(cmod) 
+# the CnRay indicate x-ray received on the child (ordinal, 4 levels)
+# the summary spews linear, quadratic and cubic function (only linear is significant)
+
+
+# let's see what happen if we conver the CnRay into numerical values + drop insignificant predictors:
+cmodr = clogit(disease ~ Fray + unclass(CnRay) + strata(ID), ramlxray)
+summary(cmodr)
+
+#
+
+##### CH3: Count Regression ####
+# page 61
+
+
+
