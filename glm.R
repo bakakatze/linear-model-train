@@ -6,6 +6,7 @@ library(faraway)
 library(MASS)
 library(splines)
 library(ggplot2)
+library(ggfortify)
 library(survival)
 
 #
@@ -239,7 +240,7 @@ xtabs(round(pp,3) ~ propAA + equip, pdf)
 # geez... this is so messy
 
 
-#### CH1 Exercise ####
+#### Exercise ####
 
 
 data(swiss)
@@ -264,7 +265,7 @@ rfert = rlm(Fertility ~ Agriculture + Education + Infant.Mortality + Catholic, d
 summary(rfert)
 
 #
-##### CH2: Binomial Dat ####
+##### CH2: Binomial Data ####
 
 data(orings)
 head(orings)
@@ -527,7 +528,104 @@ summary(cmodr)
 #
 
 ##### CH3: Count Regression ####
-# page 61
+
+data(gala) 
+# number of species of tortoise found on each Galapagos Island
+# and the number of the endemics in that region (endemic/species)
 
 
+# let's throw out the endemic variable first
+gala = gala[,-2]
 
+# plot linear model
+modl = lm(Species ~ ., gala) #pick all columns as predictors
+plot(predict(modl), residuals(modl), xlab = "Fitted", ylab = "Residuals")
+
+# non-constant variance ==> play with box-cox method ==> choose square-root transformation
+modt = lm(sqrt(Species) ~ ., gala)
+plot(predict(modt), residuals(modt), xlab ="fitted", ylab="residuals")
+summary(modt)
+# the model is fairly good, but the existence of small response values (single digits)
+# is worrying
+
+#### let's try Poisson model ####
+modp = glm(Species ~ ., family = poisson, gala)
+summary(modp)
+
+# see if large deviance can be explained by an outlier
+halfnorm(residuals(modp))
+
+# plot the estimated variance against the mean
+# for Poisson distribution, mean = variance
+plot(log(fitted(modp)), log((gala$Species - fitted(modp))^2), 
+     xlab = expression(hat(mu)), ylab = expression((y-hat(mu))^2))
+abline(0,1)
+
+# Poisson distribution has only one parameter and is not very flexible for empirical fitting purposes
+# If we know specific mechanism, we can model the response as negative binomial
+# If we don't know the specific mechanism, we can introduce a dispersion parameter
+# and, the dispersion parameter can be estimated:
+
+dp = sum(residuals(modp, type = "pearson")^2) / modp$df.residual
+
+# then let's adjust the standard errors as follows:
+summary(modp, dispersion = dp)
+
+
+# when comparing Poisson models with overdispersion, an F-test rather than
+# X2 test should be used
+drop1(modp, test ="F")
+# the z-statistics from the summary() are less reliable
+# so we used the F-test instead
+
+#### Rate models ####
+
+# sometimes we can model counts data as binomial, for example:
+# number of burglaries depends on the number of households, so >>
+# each household will be assigned 0 for not burglared OR 1 for being burglared
+# BUT, if the proportion is small, poisson approaximaton is effective
+# and binomial cannot be used if one household got burglared twice
+
+# sometimes we can model the ratio instead
+# however often there are normality problem and unequal variance when taking this approach
+
+# load data: effect of gamma radiation on the number of abnormal chromosomes (ca)
+# the number of cells exposed differ everytime (cells)
+data(dicentric)
+
+round(xtabs(ca/cells ~ doseamt+doserate, dicentric), 2)
+
+# let's plot the ratio
+with(dicentric, interaction.plot(doseamt, doserate, ca/cells))
+
+
+# we can try to model the rate directly
+# the plot tells us that the dose is multiplicative, so we log this variable
+lmod = lm(ca/cells ~ log(doserate)*factor(doseamt), dicentric)
+summary(lmod)
+# the model fits really well
+
+# but, this is the residual plot
+plot(residuals(lmod) ~ fitted(lmod), xlab="fitted", ylab="residuals")
+abline(h=0)
+
+
+## we may prefer to model the count response instead.
+# we need to log the number of cells because we expect this to have a multiplicative effect
+dicentric$dosef = factor(dicentric$doseamt)
+
+pmod = glm(ca ~ log(cells) + log(doserate) * dosef, family = poisson, dicentric)
+summary(pmod)
+
+# we can relate this poisson model with a log link back to linear model for ratio response
+# rate model (fix the coefficient as one by using an offset):
+rmod = glm(ca ~ offset(log(cells)) + log(doserate) * dosef, family = poisson, dicentric)
+summary(rmod)
+
+# not much difference
+
+autoplot(rmod, which = 1:6)
+
+#
+#### Negative Binomial ####
+# page 71
