@@ -1,11 +1,9 @@
 ## Tutorial for Linear Model and its extension by Faraway (2006)
 
-library(dplyr)
-library(tidyr)
+library(tidyverse)
 library(faraway)
 library(MASS)
 library(splines)
-library(ggplot2)
 library(ggfortify)
 library(survival)
 
@@ -548,7 +546,7 @@ summary(modt)
 # the model is fairly good, but the existence of small response values (single digits)
 # is worrying
 
-#### let's try Poisson model ####
+#### Poisson model ####
 modp = glm(Species ~ ., family = poisson, gala)
 summary(modp)
 
@@ -628,4 +626,64 @@ autoplot(rmod, which = 1:6)
 
 #
 #### Negative Binomial ####
-# page 71
+
+# load the data: five factors on the number of skips on a solder plate
+data(solder)
+modp = glm(skips ~ ., family=poisson, data=solder)
+deviance(modp)
+df.residual(modp) # gosh, bad...
+
+# adding interaction
+modp2 = glm(skips ~ (Opening + Solder + Mask + PadType + Panel)^2, family=poisson, solder)
+deviance(modp2)
+autoplot(modp2, which=1:6)
+
+# at this point we may see that this is not going to help by 
+# adding more complex transformation or interaction terms (difficult interpretation)
+modn = glm(skips~., family=negative.binomial(1), solder)
+modn
+
+# we can play around with different values of the k, in the neg. binomial code
+# but, it can be estimated using max likelihood
+modn = glm.nb(skips~., solder)
+summary(modn)
+
+#
+#### CH4: Contingency Tables ####
+
+# create the data: it is about the existence of particle in wafers
+# and its association with good or bad quality
+y = c(320,14,80,36)
+particle = gl(2,1,4, labels = c("no","yes"))
+quality = gl(2,2, labels = c("good", "bad"))
+wafer = data.frame(y, particle, quality)
+
+# we need the data to be in that form for analysis
+# but to observe it we prefer:
+ov = xtabs(y ~ quality + particle)
+
+## Poisson Model
+# suppose we assume that the process is observed for some period of time
+# and count the number of occurence of possible outcomes
+# then, it is natural to view these outcomes ocurring at different rates and
+# we could use poisson model
+modl = glm(y ~ particle + quality, poisson, wafer)
+summary(modl)
+
+# to test the significance of individual predictors use the likelihood ratio test
+# based on the differences in the deviance (does not matter in this dataset)
+drop1(modl, test="Chi")
+
+# the model coefficients are closely related to the marginal totals in the table
+# the maximum likelihood satisfy the XTy = XTu
+(t(model.matrix(modl)) %*% y)[,]
+
+# if we add interaction term it will saturate the model
+# so it will have 0 deviance and degrees of freedom
+modls = glm(y ~ (particle+quality)^2, poisson, wafer)
+summary(modls)
+
+#
+## Multinomial Model
+# page 79
+
