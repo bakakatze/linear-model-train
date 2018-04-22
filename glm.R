@@ -6,6 +6,7 @@ library(MASS)
 library(splines)
 library(ggfortify)
 library(survival)
+library(factoextra) # to do correspondence analysis
 
 #
 ##### CH1: Introduction & data overview #####
@@ -683,7 +684,71 @@ drop1(modl, test="Chi")
 modls = glm(y ~ (particle+quality)^2, poisson, wafer)
 summary(modls)
 
-#
-## Multinomial Model
-# page 79
+# 
+#### Multinomial Model ####
+pp = prop.table(xtabs(y ~ particle))
+
+qp = prop.table(xtabs(y ~ quality))
+
+
+# fitted values
+fv = outer(qp, pp) * 450
+
+# to test the fit, we compare this model against saturated model and calculate the deviance:
+2 * sum(ov * log(ov/fv))
+# note the deviance is the same as in Poisson Model
+# so the test for independence in multinomial model = test for no interaction in Poisson model
+
+# alternative to deviance is the Pearson X2 statistics:
+sum ((ov-fv)^2/fv)
+
+# to use Yate's continuity correction:
+prop.test(ov) # deviance based test is preferable still
+
+# Fisher's exact test:
+fisher.test(ov) 
+# this is good if you have small sample size and calculate exact confidence interval
+# However, for larger tahles, X2 approximation tend to be very accurate anyway (deviance and X2 pearson test)
+
+#### Larget two-ways tables ####
+data(haireye)
+
+ct = xtabs(y ~ hair + eye, haireye)
+
+# Pearson's X2 test for independence:
+summary(ct)
+
+# visualise them with dot plot and mosaic plot
+dotchart(ct)
+mosaicplot(ct, color = TRUE, main = NULL, las = 1)
+
+# now try the Poisson model:
+modc = glm(y ~ hair+eye, family = "poisson", haireye)
+summary(modc)  
+# based on the deviance of 146.44 we know that those two variables are dependent
+# but if we want to know how dependent they are, we can use correspondence analysis
+
+
+## correspondence analysis
+z = xtabs(residuals(modc, type ="pearson") ~ hair + eye, haireye)
+
+# calculating singular value decomposition
+svdz = svd(z, 2, 2)
+
+leftsv = svdz$u %*% diag(sqrt(svdz$d[1:2])) 
+rightsv = svdz$v %*% diag(sqrt(svdz$d[1:2]))
+ll = 1.1*max(abs(rightsv), abs(leftsv))
+
+# plot them
+plot(rbind(leftsv, rightsv), asp =1, xlim=c(-ll, ll), ylim=c(-ll,ll), xlab = "SV1", ylab = "SV2", type = "n")
+abline(h=0, v = 0)
+text(leftsv,dimnames(z)[[1]])
+text(rightsv,dimnames(z)[[2]])
+
+
+temp = corresp(ct, nf=3)
+get_eigenvalue(temp)
+fviz_ca_biplot(temp)
+
+
 
