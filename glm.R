@@ -2,11 +2,14 @@
 
 library(tidyverse)
 library(faraway)
-library(MASS)
-library(splines)
 library(ggfortify)
+
+library(MASS) # glm
+
+library(splines)
+
 library(survival)
-library(factoextra) # to do correspondence analysis
+library(factoextra) # to do correspondence analysis/cluster analysis
 
 #
 ##### CH1: Introduction & data overview #####
@@ -710,7 +713,7 @@ fisher.test(ov)
 # this is good if you have small sample size and calculate exact confidence interval
 # However, for larger tahles, X2 approximation tend to be very accurate anyway (deviance and X2 pearson test)
 
-#### Larget two-ways tables ####
+#### Large two-ways tables ####
 data(haireye)
 
 ct = xtabs(y ~ hair + eye, haireye)
@@ -749,6 +752,174 @@ text(rightsv,dimnames(z)[[2]])
 temp = corresp(ct, nf=3)
 get_eigenvalue(temp)
 fviz_ca_biplot(temp)
+
+
+#
+#### Matched Pairs ####
+
+data(eyegrade)
+
+ct = xtabs(y ~ right + left, eyegrade)
+
+# check for independence
+summary(ct)
+
+# checking for symmetry
+symfac = factor(apply(eyegrade[,2:3],1, function(x) paste (sort(x), collapse="-")))
+
+mods = glm(y ~ symfac, eyegrade, family = poisson)
+pchisq(deviance(mods), df.residual(mods), lower = F)
+
+# check the residuals
+round(xtabs(residuals(mods) ~ right + left, eyegrade), 3)
+
+# calculate marginal counts
+margin.table(ct, 1)
+margin.table(ct, 2)
+# we see that left eyes tend to be worse than the paired right eyes
+# so perhaps marginal homogeniety does not hold here
+# The assumption of symmetry implies marginal homogeniety (but the reverse is not necessarily true)
+
+# we may observe data with different rows and columns frequencies, but still interested in symmetry:
+# so we can fit a model (quasi-symmetry): log(np_ij) = log n + log a_i + log b_j + log gamma_ij
+
+modq = glm(y ~ right + left + symfac, eyegrade, family = poisson)
+pchisq(deviance(modq), df.residual(modq), lower = F) 
+# we see this model fit. It can be shown that marginal homogeniety together with quasi-symmetry implies symmetry.
+
+# we can test for marginal homogeniety by comparing the symmetry and quasi-symmetry models:
+anova(mods, modq, test = "Chi") # so we find evidence of a lack of marginal homogeniety. This test is only appropriate if quasi-symmetry already holds
+
+
+# when we examine the data, many people do have symmetric vision.
+# we may ask whether there is independence between right and left vision among those who do not have symmetric vision.
+
+# so, we test for quasi-independence hypothesis:
+modqi = glm(y ~ right + left, eyegrade, family = poisson, subset = -c(1,6,11,16))
+
+pchisq(deviance(modqi), df.residual(modqi), lower = F) # does not fit
+
+
+#
+#### Three-Way Contingency Tables ####
+
+# Data: 20-year follow up study on the effects of smoking
+# variable: alive/dead, smoker/non-smoker, age at 20-year mark
+data(femsmoke)
+
+# ignore the age-group first and see
+ct = xtabs(y ~ smoker + dead, femsmoke)
+
+prop.table(ct,1) # we see more smoker survive 20-year mark
+
+# we can test for this significance
+summary(ct)
+
+# it is significant. But let's see if we only look at 55-64
+cta = xtabs(y ~ smoker + dead, femsmoke, subset = (age == "55-64"))
+prop.table(cta,1) # now we got more deaths among smoker
+
+# this is an example of Simpson's Paradox
+# let's see what happened here:
+prop.table(xtabs(y ~ smoker + age, femsmoke), 2) # smokers are younger
+
+# now let's incorporate everything
+ct3 = xtabs(y ~ smoker + dead + age, femsmoke)
+apply(ct3, 3, function(x) (x[1,1]*x[2,2])/(x[1,2]*x[2,1]))
+
+# we can compute Cochran-Mantel-Haenszel test (2x2 tables across k strata)
+mantelhaen.test(ct3, exact = TRUE)
+
+# we can test for independence using linear model approach, using Pearson's X2 test:
+summary(ct3)
+
+# we can also fit the appropriate linear model:
+modi = glm(y ~ smoker + dead + age, femsmoke, family = poisson)
+c(deviance(modi), df.residual(modi))
+
+# we can show the coefficient of this model correspond to the marginal proportion:
+coefsmoke = exp(c(0, coef(modi)[2]))
+coefsmoke/sum(coefsmoke)
+
+# we see that these are just marginal proportions for smokers and nonsmokers in the data
+prop.table(xtabs(y ~ smoker, femsmoke))
+# the main effects of the model just convey information that we already know and is not the main interest of the study
+
+
+## Join independence:
+# let P_ij be the marginal probability that the observation falls into a (i,j, .) cells.
+# now suppose that the first and second variable are dependent, but jointly independent of the third
+# then: P_ijk = P_ij * P_k
+
+modj = glm(y ~ smoker * dead + age, femsmoke, family = poisson)
+c(deviance(modj), df.residual(modj)) # although there is an improvement compared with the mutual independence model, the deviance is still very high
+
+
+## Conditional independence:
+# the nature of the conditional independence can be determined by observing which of one of the three possible two-way interactions does not appear in the model
+# the most plausible conditional independence model for our data is: [P_ijk = P_ik * P_jk | P_k]
+modc = glm(y ~ smoker*age + age*dead, femsmoke, family = poisson)
+c(deviance(modc), df.residual(modc)) # we see that the deviance is only slightly larger than the df, which indicate a fairly good fit
+
+# however, we have smoe zeroes and other small numbers. So, there is some doubt of the accuracy of the X2 approximation here.
+# it is better to compare model rather than assess the goodness of fit.
+
+## Uniform association:
+# we may consider a model with all three-way interactions
+modu = glm(y ~ (smoker + age + dead)^2, femsmoke, family = poisson)
+
+# now we compute the fitted values and determine the oods ratios for each age group based on the fitted values:
+ctf = xtabs(fitted(modu) ~ smoker + dead + age, femsmoke)
+apply(ctf, 3, function(x) (x[1,1]*x[2,2])/(x[1,2]*x[2,1]))
+
+# this will be precisely the coefficient for the smoking and life-status term.
+exp(coef(modu)['smokerno:deadno'])
+
+
+## Model Selection
+# log-linear models are hierarchical, so it makes sense to start with the most complex and see how far it can be reduced
+modsat = glm(y ~ smoker * age * dead, femsmoke, family = poisson)
+drop1(modsat, test = "Chi")
+# three-way interactions suck
+
+drop1(modu, test = "Chi") # the smoker:dead is the test for conditional independence in the Cochran-Mantel-Haenszel test
+
+
+## Binomial Model
+# for some three-way tables, it may be reasonable to regard one variable as the response.
+
+# let's construct a binomial response
+ybin = matrix(femsmoke$y, ncol = 2)
+modbin = glm(ybin ~ smoker * age, femsmoke[1:14,], family = binomial)
+
+drop1(modbin, test = "Chi") # can drop the interaction term
+
+modbinr = glm(ybin ~ smoker+age, femsmoke[1:14,], family = binomial)
+drop1(modbinr, test = "Chi")
+# we see that both terms are significant, further simplification is impossible
+
+# this model is equivalent to the uniform association model above:
+deviance(modu)
+deviance(modbinr)
+
+# we can extract the same odds ratio:
+exp(-coef(modbinr)[2]) # the sign is only for changing the reference (in Binomial model)
+
+## NOTE:
+# we prefer Binomial GLM where one factor can be identified as the response
+# we prefer Poisson GLM when the relationship between variables is more symmetric
+
+# However, the null model of Binomial GLM = two-way interaction of Poisson GLM
+modbinnull = glm(ybin ~ 1, femsmoke[1:14,], family = binomial)
+deviance(modbinnull)
+
+modj = glm(y ~ smoker * age + dead, femsmoke, family = poisson)
+deviance(modj)
+
+# So, the binomial model implicitly assumes an association between smoker and age
+
+#### Ordinal Variables ####
+# page 97
 
 
 
