@@ -919,7 +919,68 @@ deviance(modj)
 # So, the binomial model implicitly assumes an association between smoker and age
 
 #### Ordinal Variables ####
-# page 97
+data(nes96)
+
+# let's see just the party affiliation and level of education
+xtabs(~ PID + educ, nes96) # both variables are ordinal here
+
+# let's transform the data into data frame
+partyed = as.data.frame(xtabs(~ PID + educ, nes96))
+
+# fit nominal - by - nominal model (ignoring the order)
+nomod = glm(Freq ~ PID + educ, partyed, family = poisson)
+pchisq(deviance(nomod), df.residual((nomod), lower = F)) # no evidence against independence
+
+# let's restructure the data so that it includes the order
+partyed$oPID = unclass(partyed$PID)
+partyed$oeduc = unclass(partyed$educ)
+
+ormod = glm(Freq ~ PID + educ + I(oPID*oeduc), partyed, family = poisson)
+anova(nomod, ormod, test = "Chi") # using ordinal information gives us more power to detect association
+# this chisquare model base test is robust in trying to find association
+
+# Let's examine the gamma in our latent continuous variables (i.e. I(oPID*oeduc))
+summary(ormod)$coef['I(oPID * oeduc)',]
+# the gamma here is positive (0.0287) which means the higher the education the greater the probability of tending to the Republican end of spectrum
 
 
+## to check the robustness of the scores, we can assign different scores and test. 
+# For example we assign score that can distinguish democrat and republic
+# and we'd say people who complete High school or less are not different
+apid = c(1,2,5,6,7,10,11)
+aedu = c(1,1,1,2,2,3,3)
 
+ormoda = glm(Freq ~ PID + educ + I(apid[oPID]*aedu[oeduc]), partyed, family = poisson)
+anova(nomod, ormoda, test = "Chi") # the numerical outcome is different but the association is still significant
+
+## for evenly spaced scores, the log-odds ratio of the 2x2 cells subset are all equal = gamma
+round(xtabs(predict(ormod, type = 'response') ~ PID + educ, partyed), 2)
+# now calculate log odds ratio of the lower right 2x2 cells
+log(39.28*28.85/(47.49*23.19))
+
+# it is worth examining the residuals to check if there is more struture than the model suggests
+round(xtabs(residuals(ormod, type = 'response') ~ PID + educ, partyed),2)
+# we see there are more weakRep with college degree than expected and with less Master degree than expected.
+# this indicate the relationship is not monotone
+
+# we can investigate this effect by considering an odrinal-by-nominal model where we treat education as nomial (i.e. column effect)
+cmod = glm(Freq ~ PID + educ + educ:oPID, partyed, family = poisson)
+anova(nomod, cmod, test = "Chi") # column model seems to do better
+
+summary(cmod)
+# if the relationship is monotone, than the coefficient in the interaction terms would show so
+# but this is clearly not the case
+
+# But, let's compare the linear-by-linear association:
+anova(ormod, cmod, test = "Chi") # we see the simpler linear-by-libear association is preferred than the more complex model
+
+# we see the coefficient for high school ~ Master degree is no different
+# this may suggest we need a different scoring
+aedu = c(1,1,2,2,2,2,2)
+ormodb = glm(Freq ~ PID + educ + I(oPID*aedu[oeduc]), partyed, family = poisson)
+deviance(ormodb)
+deviance(ormod)
+# better! this means we may be able to reduce/simplify the education categories
+
+#### CH 5: Multinomial Data ####
+# page 106
