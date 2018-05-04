@@ -5,6 +5,7 @@ library(faraway)
 library(ggfortify)
 
 library(MASS) # glm
+library(nnet) # multinomial
 
 library(splines)
 
@@ -983,4 +984,63 @@ deviance(ormod)
 # better! this means we may be able to reduce/simplify the education categories
 
 #### CH 5: Multinomial Data ####
-# page 106
+data(nes96)
+
+sPID = nes96$PID
+
+# simplify the levels into three
+levels(sPID) = c("Democrat", "Democrat", "Independent", "Independent", "Independent", "Republican", "Republican")
+summary(sPID)
+
+inca = c(1.5,4,6,8,9.5,10.5,11.5,12.5,13.5,14.5,16,18.5,21,23.5,27.5,32.5,37.5,42.5,47.5,55,67.5,82.5,97.5,115)
+nincome = inca[unclass(nes96$income)] # take mid point of the income
+summary(nincome)
+
+table(nes96$educ)
+
+
+# plot them
+# Democrat = solid, republican = dashed(green), independent = dotted(red)
+matplot(prop.table(table(nes96$educ, sPID), 1), type ="l", xlab = "Education", ylab = "Proportion", lty = c(1,2,5))
+cutinc = cut(nincome, 7)
+il = c(8,26,42,58,74,90,107)
+
+matplot(il,prop.table(table(cutinc,sPID),1),lty=c(1,2,5),type="l",ylab="Proportion",xlab="Income")
+
+cutage = cut(nes96$age, 7)
+al = c(24,34,44,54,65,75,85)
+
+matplot(al,prop.table(table(cutage,sPID),1),lty=c(1,2,5),type="l",ylab="Proportion",xlab="Age")
+
+
+# build the multinomial model
+mmod = multinom(sPID ~ age + educ + nincome, nes96)
+
+mmodi = step(mmod) 
+# we see that removing education at the first step reduce the AIC
+# age is removed on the second step
+
+## we can also use the likelihood methods to derive a test to compare nested models.
+mmode = multinom(sPID ~ age + nincome, nes96)
+deviance(mmode) - deviance(mmod)
+
+pchisq(16.206, mmod$edf - mmode$edf, lower = F)
+# we see that education is not significant relative to the full model
+
+
+# we can predict using midpoints income
+predict(mmodi, data.frame(nincome = il), type = "probs") # the probability of being republican or independent increases with income
+
+
+## summary of the relationship between the predictors and the response:
+summary(mmodi)
+
+# the intercept term model the probability of the party identification for an income of zero
+# we can see:
+cc = c(0, -1.17493, -0.95036)
+exp(cc)/sum(exp(cc))
+
+predict(mmodi, data.frame(nincome = 0), type = "probs")
+
+
+# page 111
