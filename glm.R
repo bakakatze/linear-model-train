@@ -1043,4 +1043,40 @@ exp(cc)/sum(exp(cc))
 predict(mmodi, data.frame(nincome = 0), type = "probs")
 
 
-# page 111
+# we can fit a multinomial logit model using a Poisson GLM.
+# we can exploit this by declaring a factor that has a level for each multinomial observation (we call this response factor)
+cm = diag(3)[unclass(sPID), ]
+
+# let's see the firsr 4 individual
+cm[1:4,] # republican, democrat 3x
+
+y = as.numeric(t(cm))
+resp.factor = gl(944,3)
+
+# let's label them
+cat.factor = gl(3,1,3*944, labels = c("D", "I", "R"))
+
+# replicate the predictor
+rnincome = rep(nincome, each = 3)
+
+head(data.frame(y, resp.factor, cat.factor, rnincome))
+
+
+## null model
+nullmod = glm(y ~ resp.factor + cat.factor, family = poisson)
+
+## income is modeled with an interaction with party affiliation
+glmod = glm(y ~ resp.factor + cat.factor + cat.factor:rnincome, family = poisson)
+
+deviance(glmod)
+deviance(mmodi) # the deviance is the same as the multinomial model above
+
+coef(glmod)[c(1,945:949)]
+coef(mmodi)
+# the point is that the multinomial logit can be viewed as a GLM type model
+
+
+#### Hierarchical or Nested Response ####
+
+# page 113
+
