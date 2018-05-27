@@ -1078,5 +1078,135 @@ coef(mmodi)
 
 #### Hierarchical or Nested Response ####
 
-# page 113
+data(cns)
+cns
+
+# because we got a huge number of normal birth
+# it's better to model it based on 2 hierarchies
+# Y = Binom(no cns malform, cns malform)
+#                           cns malform = Multinom(anencephalus, spina bifida, other)
+
+
+# let's start with the binom model
+cns$CNS = cns$An+cns$Sp+cns$Other
+
+plot(log(CNS/NoCNS) ~Water, cns, pch=as.character(Work))
+
+
+## because Water and Area is confouded we cannot put these predictors in one model
+# try both and compare
+
+binmodw = glm(cbind(CNS,NoCNS) ~ Water + Work, cns, family=binomial)
+binmoda = glm(cbind(CNS,NoCNS) ~ Area + Work, cns, family=binomial)
+
+anova(binmodw, binmoda, test = "Chi") # no significant difference
+
+halfnorm(residuals(binmodw))
+# Newport is an outlier
+
+summary(binmodw)
+exp(coef(binmodw)[3]) # non manual worker have a 29% lower chance of CNS malform
+exp(coef(binmodw)[2]*100) # 100 lower difference in water hardness havea 27% lower chance
+
+
+## now let's move on to a multinomial model for the three malformation types
+cmmod = multinom(cbind(An, Sp, Other) ~ Water + Work, cns)
+
+nmod = step(cmmod)
+nmod # which leaves us with a null final model
+
+# fitted proportion
+cc = c(0,0.28963, -0.98083)
+names(cc) = c("An", "Sp", "Other")
+exp(cc)/sum(exp(cc))
+# so we see that water hardness and parents' profession are related
+# to the probability of malformed birth but not the types of malformation
+
+# let's see if we add all four categories in one model
+multinom(cbind(NoCNS, An, Sp, Other) ~ Water + Work, cns)
+# Water and WOrk variables are significant here, but we cannot distinguish
+# the effect on the type of malformation easily in this model
+
+
+#### Ordinal Multinomial Responses ####
+
+# proportional odds logistic regression
+pomod = polr(sPID ~age + educ + nincome, nes96)
+
+c(deviance(pomod), pomod$edf)
+
+# can be compared to the corresponding multinomial logit model
+c(deviance(mmod), mmod$edf)
+
+# the proportional odds model uses fewer parameters, but does not fit quite as well.
+# we can then use an AIC-based variable selection method:
+
+pomodi = step(pomod)
+# the finished model only include income, just like the multinomial model
+
+# we can also use a likelihood ratio test
+deviance(pomodi) - deviance(pomod)
+pchisq(11.151, pomod$edf - pomodi$edf, lower = F)
+# no significant difference, which means simplification of the model is justifiable
+
+
+## we can check the proportional odds assumption by computing the observed odds proportions
+# with respect to income levels
+
+pim = prop.table(table(nincome, sPID), 1)
+
+logit(pim[,1]) - logit(pim[,2] + pim[,3])
+# It is questionable whether these can be considered sufficiently constant,
+# but at least there is no trend.
+
+# now consider the interpretation of the fitted coefficients:
+summary(pomodi)
+
+# we can say the odds of moving from democrat to independent/republican
+# or moving from democrat/independent to republican increase by a factor of
+# exp(0.013120) = 1.0132 as income increases by one unit ($1000).
+
+# notice the log-odds are similar to those obtained in the multinomial logit model.
+# the intercepts correspond to the theta j.
+# so for income $0, the predicted probability of being a democrat is:
+ilogit(0.2091)
+
+# while being an independent is:
+ilogit(1.292) - ilogit(0.209)
+
+# we can compute predicted values:
+predict(pomodi, data.frame(nincome = il, row.names = il),
+        type = "probs")
+
+# notice how the probs of being democrat uniformly decreases whit income
+# while the inverse is true of the probs of being republican
+# but, the middle category, increases then decreases
+# this type of behavior can be expected from the latent variable representation of the model
+
+# we can illustrate the latent variable interpretation of proportional odds
+# by computing the cutpoints for incomes of $0, $50,000 and $100,000:
+x = seq(-4, 4, by = 0.05)
+plot(x, dlogis(x), type = "l")
+abline(v=c(0.209, 1.292))
+abline(v=c(0.209,1.292) - 50*0.013120, lty=2)
+abline(v=c(0.209,1.292) - 100*0.013120, lty=3) # i see....
+
+
+# applying the ordered probit model to the nes96 data, we find:
+opmod = polr(sPID ~ nincome, method = "probit")
+summary(opmod)
+
+# the deviance is similar to the logit model
+# but the coefficient appear to be different. However, if we compute the same predictions:
+dems = pnorm(0.128 - il * 0.008182)
+demind = pnorm(0.798 - il*0.008182)
+cbind(dems, demind-dems, 1-demind)
+# the predicted values are very similar to those seen for the logit.
+
+
+# to use the cloglog method, just put "cloglog" under method
+
+#### CH6: Generalised Linear Models ####
+# page 126
+
 
