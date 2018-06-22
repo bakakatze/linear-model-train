@@ -10,7 +10,8 @@ library(nnet) # multinomial
 library(splines)
 
 library(survival)
-library(factoextra) # to do correspondence analysis/cluster analysis
+library(factoextra) # to do correspondence analysis / cluster analysis
+
 
 #
 ##### CH1: Introduction & data overview #####
@@ -1207,6 +1208,220 @@ cbind(dems, demind-dems, 1-demind)
 # to use the cloglog method, just put "cloglog" under method
 
 #### CH6: Generalised Linear Models ####
-# page 126
+
+# let's see how the fitting algorithm works (Iteratively Reweighted Least Squares [IRWLS])
+data(bliss)
+head(bliss)
+
+modl = glm(cbind(dead,alive) ~ conc, family = binomial, bliss)
+summary(modl)$coef
+
+y = bliss$dead/30 # we use y as our initial guess, cause there is no 0 / 1
+mu = y
+eta = logit(mu)
+z = eta + (y-mu)/(mu*(1-mu))
+w = 30*mu*(1-mu)
+
+lmod = lm(z ~ conc, weights = w, bliss)
+coef(lmod)
+
+# it is very close to the converged values from modl
+# this is not uncommon, but to get more precise we need to do more iterations
+
+for (i in 1:5) {
+  eta = lmod$fitted.values
+  mu = ilogit(eta)
+  z = eta + (y-mu)/(mu*(1-mu))
+  w = 30*mu*(1-mu)
+  
+  lmod = lm(z ~ bliss$conc, weights = w)
+  cat(i, coef(lmod), "\n")
+}
+
+# this converged quite fast, if it is not fast there are usually some problems with the model
+summary(lmod)
+
+#
+#### Hypothesis Test for GLM ####
+
+summary(modl)
+# we can do a goodness of fit test by examining the size of the residual deviance compared to its degrees of freedom
+1- pchisq(deviance(modl), df.residual(modl))
+
+# p value is large indicating no evidence of a lack of fit.
+
+# we can also test for singificance of the linear concentration term by comparing the current model with the null
+anova(modl, test = "Chi")
+
+# we can also test a more complex model
+modl2 = glm(cbind(dead,alive) ~ conc + I(conc^2), family = binomial, bliss)
+anova(modl, modl2, test = "Chi")
+anova(modl2, test = "Chi")
+
+# so, there is no point in adding quadratic term
+
+# differences in deviance is the preffered method. Due to problems noted by Hauck and Donner (1977)
+
+#### GLM diagnostics ####
+
+# Pearson residuals can be skewed for nonnormal responses
+# let's see different type of residuals in GLM
+
+residuals(modl) # deviance residuals (degault choices)
+
+residuals(modl, "pearson") # pearson residuals
+
+residuals(modl, "response") # response residuals
+# which are the same as
+bliss$dead/30 - fitted(modl)
+
+residuals(modl, "working") # working residuals
+# which is the same as
+modl$residuals
+# warning!! this is usually not needed for diagnostic purposes
+
+residuals(lmod) # the working residuals are by-product of IRWLS fitting procedure
+
+
+## Leverage
+# for linear model:: y_hat = H*y
+# H here is the hat matrix that projects the data onto the fitted values (y_hat)
+# the leverages h_i are given by the diagonal of H and represent the potential of the point to influence the fit
+
+# Leverages are somewhat different for GLMs.
+# H (in GLMs) = W^(1/2) %*% X %*% inv(t(X) %*% W %*% X) %*% t(X) %*% W^(1/2)
+
+# we extract the diagonal elements of H to get the leverages h_i. A large value of h_i
+# indicates that the fit may be sensitive to the response at case _i. Large leverages typically mean that
+# the predictors values are unusual in some way. Leverages in GLMs are no longer just a function of X, but
+# they depend on the response through the weights W.
+
+# calculate the leverages for GLMs
+influence(modl)$hat
+
+# jacknife approximation to scale the residuals
+rstudent(modl)
+
+# outliers may be detected by observing particularly large jacknife residuals
+
+# Leverage only measures the potential to affect the fit, whereas measures of influence more directly assess 
+# the effect of each case on the fit. We can examine the change in the fit from omitting a case 
+# by looking at the changes in the coefficients:
+influence(modl)$coef
+
+# alternatively, we can examine the Cook statistics
+cooks.distance(modl)
+# this shows that the biggest change would occur by omitting the first observation.
+
+
+#### Two types of Model Diagnostics ####
+
+# one is to detect single cases or small groups of cases that do not fit the pattern of the rest of the data
+# the other one is to check assumptions of the model (2 == structural or stochastic)
+
+# for linear models, the plot of residuals against the fitted values is probably the single most valuable graphic
+
+# for GLMs, we must decide on the appropriate scale for the fitted values.
+# usually, it is better to plot the linear predictors rather than the predicted responses.
+
+# let's revisit the Galapagos data
+data(gala)
+gala = gala[,-2]
+
+modp = glm(Species ~ ., family = poisson, gala)
+plot(residuals(modp) ~ predict(modp, type = "response"), xlab = expression(hat(mu)), ylab = "Deviance Residuals")
+
+# there are just a few islands with a large predicted number of species while mose predicted response values are small
+# this makes it difficult to see the relationship between the residuals and the fitted values because most of the points
+# are compressed on the left
+
+# now, let's try plotting the predictors instead (eta)
+plot(residuals(modp) ~ predict(modp, type = "link"), xlab = expression(hat(eta)), ylab="Deviance Residuals")
+
+# In GLMs, it is better to transform the predictors because it causes the least disruption to the GLM
+# for this particular plot, there is no evidence of non-linearity
+
+## For all GLMs but the Gaussian, we have a nonconstant variance function.
+# however, by using the deviance residuals we have already scaled out the variance function
+# so, provided the variance function is correct, we do excpect to see constant variance in the plot
+
+# if we use the response residuals instead the deviance:
+plot(residuals(modp, type = "response") ~ predict(modp, type = "link"), xlab=expression(hat(eta)),
+     ylab = "Response Residual")
+# we see a pattern of increasing variation consistent with Poisson
+
+# plot of the residuals are not helpful for binary responses and small sample binomial
+
+# investigating the nature of the relationship between predictors and the response is another 
+# primary objective of diagnostic plots
+
+plot(Species ~ Area, gala)
+plot(Species ~ log(Area), gala)
+
+# we see a curvilinear relationship between the predictor and the response
+# However, the default GLM uses a log link which we need to take into account
+# to allow for the choice of link function, we can plot the linearised response:
+
+mu = predict(modp, type = "response")
+z = predict(modp) + (gala$Species - mu)/mu
+
+plot(z ~ log(Area), gala, ylab = "linearised response")
+
+# we now see a linear relationship suggesting that no further transformation of area is necessary.
+modpl = glm(Species ~ log(Area) + log(Elevation) + log(Nearest) + log(Scruz + 0.1) + log(Adjacent),
+            family = poisson, gala)
+c(deviance(modp), deviance(modpl))
+# the log transformation produces smaller deviance
+
+
+# the disadvantage of examining the raw relationship between response and the predictors is that it fails
+# to take into account the effect of other predictors
+
+## Partial residual plots are used for linear models to make allowance for the effect of the other predictors
+# while focusing on the relationship of interest.
+mu = predict(modpl, type ="response")
+u = (gala$Species - mu)/mu + coef(modpl)[2]*log(gala$Area)
+plot(u ~ log(Area), gala, ylab = "Partial Residual")
+abline(0, coef(modpl)[2])
+
+## CHecking unsual points in GLM
+# use half-normal plot that compares the sorted absolute residuals and the quantiles of the half-normal distribution
+# the residuals are not expected to be normally distributed
+# so we are only looking at outliers
+halfnorm(rstudent(modpl))
+
+# no sign of outliers
+
+# The half normal plot is also useful for positive-value diagnostics such as leverages and Cook statistics
+gali = influence(modpl)
+halfnorm(gali$hat)
+
+# let's see the influence
+halfnorm(cooks.distance(modpl))
+
+# again, Santa Cruz island is influential
+# we can examine the change in the fitted coefficients. For example,
+# consider the change in the Scruz coefficient as shown:
+plot(gali$coef[, 5], ylab = "Change in Scruz coef", xlab = "Case no.")
+
+
+# let's see what happened if we exclude Santa Cruz from the model
+modplr = glm(Species ~ log(Area) + log(Elevation) + log(Nearest) + log(Scruz+0.1) + log(Adjacent), gala,
+             family = poisson, subset = -25)
+cbind(coef(modpl), coef(modplr))
+
+# Scruz variable changed sign.. another solution for the full model is to add a larger amount, say 0.5 instead of 0.1
+
+# other than user-introduced anomaly, we find no difficulty.
+# Using our earlier discovery of log transformation, some variable selection and allowing for remaining overdispersion
+# our final model is:
+modpla = glm(Species ~ log(Area) + log(Adjacent), family = poisson, gala)
+dp = sum(residuals(modpla, type = "pearson")^2) / modpla$df.residual
+summary(modpla, dispersion = dp)
+
+#
+#### CH7: Other Generalised Linear Models (GLMs) ####
+
+# page 149
 
 
