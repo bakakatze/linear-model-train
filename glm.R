@@ -1422,6 +1422,79 @@ summary(modpla, dispersion = dp)
 #
 #### CH7: Other Generalised Linear Models (GLMs) ####
 
-# page 149
+
+# Gamma GLM
+x = seq(0, 8 , by = 0.1)
+
+plot(x, dgamma(x, 3), type = "l", ylab = "", xlab = "", ylim = c(0,1.25),
+     xaxs = "i", yaxs = "i")
 
 
+# revisit data from a step in the manufacturing process for semiconductors
+# four factors are believed to influence the resistivity of the wafer and so
+# full factorial experiment was run
+# Previous experience led to the expectation that resistivity would have a 
+# skewed distribution, so need to transform this
+data(wafer)
+summary(wafer)
+
+
+# we can use log transform (Box-Cox method)
+llmdl = lm(log(resist) ~.^2, wafer)
+rlmdl = step(llmdl)
+summary(rlmdl)
+
+# we find a model with three two-way interactions, all with x3
+
+# Now.. we fit corresponding gamma GLM
+gmdl = glm(resist ~.^2, family = Gamma(link=log), wafer)
+rgmdl = step(gmdl)
+summary(rgmdl)
+
+# the results are similar to the linear model
+
+# the maximum likelihood estimate of phi (dispersion parameter):
+require(MASS)
+gamma.dispersion(rgmdl)
+
+
+## more example
+# Data on payment insurance claims for various areas of Sweden in 1977
+# the data is subdivided by mileage driven, bonys of not having made previous claim,
+# type of car
+
+data(motorins)
+motori = motorins[motorins$Zone == 1,]
+gl = glm(Payment ~ offset(log(Insured)) + as.numeric(Kilometres) +
+           Make + Bonus, family = Gamma(link = log), motori)
+summary(gl)
+
+
+# in comparison to the lognormal model:
+llg = glm(log(Payment) ~ offset(log(Insured)) + as.numeric(Kilometres) +
+           Make + Bonus, family = gaussian, motori)
+summary(llg)
+
+
+## let's compare the shapes of the distributions for the response using the dispersion
+# estimates from the two models
+x = seq(0,5, by = 0.05)
+
+plot(x, dgamma(x, 1/0.55597, scale = 0.55597), type = "l", yaxs = "i", ylim = c(0,1))
+
+plot(x, dlnorm(x, meanlog = -0.30551, sdlog = sqrt(0.55597)), type = "l",
+               yaxs = "i", ylim = c(0,1))
+# the lognormal model has higher kurtosis (sharper peak)
+
+# we may also make predictions from both models
+x0 = data.frame(Make = "1", Kilometres = 1, Bonus = 1, Insured = 100)
+
+predict(gl, new = x0, se = TRUE, type = "response")
+predict(llg, new = x0, se = TRUE, type = "response")
+c(exp(10.998), exp(10.998)*0.16145)
+
+#
+#### Inverse Gaussian GLM ####
+
+
+# page 157
