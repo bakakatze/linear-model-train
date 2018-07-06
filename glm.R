@@ -234,8 +234,8 @@ xtabs(round(pp,3) ~ econ + equip, pdf)
 
 # we can do the same approach for perAA:equip
 pdf = data.frame(econ=rep("middle",15),
-           equip=rep(levels(gavote$equip),rep(3,5)),
-           perAA=rep(c(.11,0.23,0.35),5))
+                 equip=rep(levels(gavote$equip),rep(3,5)),
+                 perAA=rep(c(.11,0.23,0.35),5))
 
 pp = predict(finalm, new=pdf)
 
@@ -441,7 +441,7 @@ deviance(modl)
 #### prediction and effective doses ####
 
 modl = glm(cbind(dead,alive) ~ conc, family=binomial, data = bliss)
-  
+
 # let's predict the probability of death at dose = 2.5 + it's CI
 pred.modl = predict(modl, newdata = data.frame(conc=2.5), se=T)
 
@@ -1420,6 +1420,28 @@ dp = sum(residuals(modpla, type = "pearson")^2) / modpla$df.residual
 summary(modpla, dispersion = dp)
 
 #
+#### Exercises CH8 ####
+
+# fit the orings data with quasibinomial
+data(orings)
+
+orings$pdmg = orings$damage/6
+
+qbinom = glm(pdmg ~ temp, family = quasibinomial, orings)
+summary(qbinom)
+
+plot(residuals(qbinom) ~ predict(qbinom, type = "link"), xlab = expression(hat(eta)), ylab = "Deviance Residuals")
+
+halfnorm(influence(qbinom)$hat)
+
+predict(qbinom, data.frame(temp = 31))
+
+# fit the orings data with a binomial response and a logit link
+logitmod = glm(cbind(damage, 6-damage) ~ temp, family = binomial, orings)
+summary(logitmod)
+
+
+#
 #### CH7: Other Generalised Linear Models (GLMs) ####
 
 
@@ -1472,7 +1494,7 @@ summary(gl)
 
 # in comparison to the lognormal model:
 llg = glm(log(Payment) ~ offset(log(Insured)) + as.numeric(Kilometres) +
-           Make + Bonus, family = gaussian, motori)
+            Make + Bonus, family = gaussian, motori)
 summary(llg)
 
 
@@ -1483,7 +1505,7 @@ x = seq(0,5, by = 0.05)
 plot(x, dgamma(x, 1/0.55597, scale = 0.55597), type = "l", yaxs = "i", ylim = c(0,1))
 
 plot(x, dlnorm(x, meanlog = -0.30551, sdlog = sqrt(0.55597)), type = "l",
-               yaxs = "i", ylim = c(0,1))
+     yaxs = "i", ylim = c(0,1))
 # the lognormal model has higher kurtosis (sharper peak)
 
 # we may also make predictions from both models
@@ -1496,5 +1518,93 @@ c(exp(10.998), exp(10.998)*0.16145)
 #
 #### Inverse Gaussian GLM ####
 
+require(SuppDists)
 
-# page 157
+x = seq(0, 8, by = 0.1)
+
+plot(x, dinvGauss(x, 2, 10), type = "l", ylab = "", xlab = "", ylim = c(0,1.5), xaxs = "i", yaxs = "i")
+
+# this inverse gaussian distribution is useful for modeling of lifetime distributions with non-monotone failure rates
+
+# let's see an example of projected and actual sales data
+data(cpd)
+
+# use linear model first
+lmod = lm(actual ~ projected-1, cpd)
+summary(lmod)
+plot(actual ~ projected, cpd)
+abline(lmod)
+
+# now consider the inverse Gaussian GLM, we must specify the identity link because we have y_i = beta * x_i
+igmod = glm(actual ~ projected-1, family = inverse.gaussian(link="identity"), cpd)
+summary(igmod)
+
+plot(residuals(igmod) ~ log(fitted(igmod)), ylab ="Deviance residuals", xlab = expression(log(hat(mu))))
+abline(h = 0)
+
+#
+#### Joint Modeling of the Mean and Dispersion ####
+
+# In industrial experiments.
+# sometimes we wisht to manufacture an item with a target mean or optimised response
+# we set the predictors to produce items as close as possible to the mean. this requires a model for the mean
+# We would also prefer that the variance of the response be small at the chosen value of the predictors for production
+
+## example: we want to make a cake mix so that everyone can produce mediocre cake with less variance
+
+# now look into a welding-strength experiment data
+data(weldstrength)
+lmod = lm(Strength ~ Drying + Material + Preheating, weldstrength)
+summary(lmod)
+
+# let's model the dispersion
+# squared studentised residuals as the response in the dispersion with a gamma GLM using a log-link and weights of 1-h_i
+h = influence(lmod)$hat
+d = residuals(lmod)^2/(1-h)
+gmod = glm(d ~ Method + Preheating, family = Gamma(link=log), weldstrength, weights = 1 - h)
+
+# now feedbackt the estimated weights to the linear model
+w = 1/fitted(gmod)
+lmod = lm(Strength ~ Drying + Material + Preheating, weldstrength, weights = w)
+
+# Iterate this until it converges
+summary(gmod)
+summary(lmod)
+
+#
+#### Quasi-Likelihood ####
+
+# the benefit of quasi-binomial and quasi-poisson GLMs is that it allows for the dispersion parameter
+# to be a free parameter, which is useful in modeling overdispersion. (until GEE is developed that is)
+
+
+# let's see data on sleep behaviour of 62 mammals
+data(mammalsleep)
+mammalsleep$pdr = with(mammalsleep, dream/sleep)
+summary(mammalsleep$pdr)
+
+# the dream/sleep proportion ranges from 0 to 0.46
+# logit link seems sensible here
+# Further, we expect the variance to be greater for moderate values of the proportion mu
+# and less as mu approaches zero or one.
+# This suggest a variance function of the approximate from mu(1-mu)
+# this corresponds to the binomial GLM with the canonical logit link, yet the response is not binomial.
+# we propose quasi-binomial:
+modl = glm(pdr ~ log(body) + log(brain) + log(lifespan) + log(gestation) + predation + exposure + danger,
+           family = quasibinomial, mammalsleep)
+drop1(modl, test = "F") # since we use a free dispersion parameter, we must use F-tests
+
+# backward elimination result in:
+modl = glm(pdr ~ log(body) + log(lifespan) + danger, family = quasibinomial, mammalsleep)
+summary(modl)
+
+# diagnostics:
+ll = row.names(na.omit(mammalsleep[,c(1,6,10,11)]))
+halfnorm(cooks.distance(modl), labs = ll)
+plot(predict(modl), residuals(modl, type = "pearson"), xlab = "Linear Predictor", ylab = "Pearson Residuals")
+
+#
+#### CH8: Random Effects ####
+
+# page 169
+
