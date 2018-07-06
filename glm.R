@@ -1575,7 +1575,8 @@ summary(lmod)
 #### Quasi-Likelihood ####
 
 # the benefit of quasi-binomial and quasi-poisson GLMs is that it allows for the dispersion parameter
-# to be a free parameter, which is useful in modeling overdispersion. (until GEE is developed that is)
+# to be a free parameter, which is useful in modeling overdispersion
+# you now can add a scale parameter (usually denoted by a sigma squared symbol) to the variance function (cause you have binomial, poisson)
 
 
 # let's see data on sleep behaviour of 62 mammals
