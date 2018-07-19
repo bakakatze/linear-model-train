@@ -1607,5 +1607,41 @@ plot(predict(modl), residuals(modl, type = "pearson"), xlab = "Linear Predictor"
 #
 #### CH8: Random Effects ####
 
-# page 169
+# let's start with the simplest possible random effects model
+# one-way ANOVA with 'a' factor at 'a' levels
+# y_ij = mu + alpha_i + E_ij
+# variances: sigma^2_alpha & sigma^2_E
+# Notice that this includes a correlation between observations at the same level =
+# rho = sigma^2_alpha / (sigma^2_alpha + sigma^2_E)
+# this is also known as Intraclass Correlation Coefficient (ICC)
+
+data(pulp)
+op = options(contrasts = c("contr.sum", "contr.poly"))
+lmod = aov(bright ~ operator, pulp)
+summary(lmod)
+coef(lmod)
+options(op)
+
+# turning to random effects model, we can compute the variance of the operator effects:
+(0.447-0.106)/5
+
+require(lme4)
+mmod = lmer(bright ~ 1+(1|operator), pulp) # this use Restricted Maximum Likelihood Estimator (REML)
+summary(mmod)
+
+# this model got a fixed effect = the intercept (denoted by the first '1')
+# random effect is the (1|operator), the '1' here indicates the random effect is constant within each group
+# we see here the REML method gives identical result with ANOVA. This may not be the case for unbalance design
+
+# we can also compute the maximum likelihood estimates:
+smod = lmer(bright ~ 1 + (1|operator), pulp, REML = FALSE)
+summary(smod)
+
+
+#
+#### Inference ####
+
+# page 174
+
+
 
