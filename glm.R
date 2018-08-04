@@ -6,6 +6,7 @@ library(ggfortify)
 
 library(MASS) # glm
 library(nnet) # multinomial
+library(lme4) # multilevel model
 
 library(splines)
 
@@ -1641,7 +1642,112 @@ summary(smod)
 #
 #### Inference ####
 
-# page 174
+### Testing the Fixed Effect
+# if you plan to use likelihood ratio test to compare two nested models that
+# differ only in their fixed effects, you cannot use REML estimation.
+# REML estimates the random effects by considering linear combinations of the data
+# that removes the fixed effects.
+# If the fixed effects are changed, the likelihoods of the two models
+# will not be comparable.
+# OPTIONS: 
+# >> ordinary maximum likelihood
+# >> parametric bootstrap
+# >> F-test/t-test assuming the random part is equal to its estimated value
+
+### Testing the Random Effect
+# OPTIONS:
+# chi-square approximation (conservative)
+# bootsrap methods
+
+### Expected Mean Squares
+# this is a hypothesis test based on the SS found in ANOVA decompositions
+# however, this requires adjustment for each model
+# and the test cannot be used if the experiment is unbalanced
+
+## ok let's see using the pulp data:
+# NULL model
+nullmod = lm(bright ~ 1, pulp)
+
+# then compare with 
+# smod (with random effect on the operator level) + using MLE
+tempL = as.numeric(2* (logLik(smod) - logLik(nullmod)))
+pchisq(tempL, 1, lower = FALSE)
+
+# we can use parametric bootstrap to obtain a more accurate p-value
+# In practice, we do not know the true value of mu and var, but
+# we can use estimated values (this distinguishes parametric bootstrap from the simulation approach)
+
+# we can simulate responses under the null:
+y = simulate(nullmod)
+
+# now taking the data we generate, we fit both the null and alt model
+lrstat = numeric(1000)
+
+for(i in 1:1000) {
+  y = unlist(simulate(nullmod))
+  bnull = lm(y ~ 1)
+  balt = lmer(y ~ 1 + (1|operator), pulp, REML = FALSE)
+  
+  lrstat[i] = as.numeric(2*(logLik(balt)-logLik(bnull)))
+  
+}
+
+# we may examine the distribution of the bootstrapped LRTs
+# then compute the proportion that are close to zero
+mean(lrstat < 0.00001)
+
+# our estimated p-value
+mean(lrstat > tempL)
+
+# standard error of the estimate
+sqrt(mean(lrstat > tempL) * 0.98/1000)
+
+# there is evidence that the random effect is significantly explain the data
+# relative to the null model
+
+#### Predicting Random Effects ####
+
+# in a fixed effect model, the parameters can be estimated
+# BUT, in a random effects model, there ara no longer parameters
+# it is just random variables under normal assumption: param ~ N(0,var)
+
+# let's use bayesian approach
+# Let f represent density then the posterio density for alpha (parameter)
+# is given by:
+# f(a_i|y) = f(y|a_i)f(a_i)
+
+# we can then find posterior mean of a_i by integrating them, or..
+# for general case, this work out to be:
+# a_hat = D T(Z) (V)^-1 (y - XB)
+
+# we take an empircal Bayes point of view and substitute the MLEs into
+# D, V, and B to obtain the predicted random effects
+
+ranef(mmod)$operator
+cc = model.tables(lmod)
+cc
+
+# then compute the ratio to the random effect
+cc[[1]]$operator / ranef(mmod)$operator
+# typically the predicted random effects are smaller
+
+# we can predict new operators by using the best linear unbiased predictors (BLUPs):
+fixef(mmod) + ranef(mmod)$operator
+# if we do not know the operator, we can just use the mu_hat = 60.4
+
+# diagnostic plot for one-way random effects model:
+qqnorm(resid(mmod), main = "")
+plot(fitted(mmod), resid(mmod), xlab = "fitted", ylab = "residuals")
+abline(0,0)
+
+# random effects models are sensitive to outliers
+# the residual fitted plot is also important cause we assumed that the
+# error variance was constant
+
+#### Blocks as Random Effects ####
+ 
+# page 180
+
 
 
 
