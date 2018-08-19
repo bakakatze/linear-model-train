@@ -1746,8 +1746,124 @@ abline(0,0)
 
 #### Blocks as Random Effects ####
  
-# page 180
+# it is important to treat blocks as random effects
+# we illustrate with an experiment to compare four processes: A, B, C, D
+# for the production of penicillin
+# the raw material: corn step liquor, is quite variable and can only be made
+# in blends sufficient for four runs.
+# thus a randomised complete block design is suggested by the nature of the experimental units
 
+data(penicillin)
+
+# we start with fixed effect analysis
+op = options(contrasts=c("contr.sum", "contr.poly"))
+lmod = aov(yield ~ blend + treat, penicillin)
+summary(lmod)
+coef(lmod)
+
+# no significant effect between treatments but there is between blends
+
+# now, let's see using a mixed model:
+# fixed treatment effects and random blend effects
+# this seems natural since the blends we use can be viewe as having been
+# selected from some notional population of blends
+
+mmod = lmer(yield ~ treat + (1|blend), penicillin)
+summary(mmod)
+
+# the residual variance is the same in both cases: 18.8
+# this is true because we have a balanced design and so REML is
+# equivalent to the ANOVA estimator
+# The treatment effects are also the same as is the overall mean.
+
+# The best linear unbiased predictors for the random effects are:
+ranef(mmod)$blend
+
+# we can test the significance of the fixed effects in two ways
+# we can use ANOVA method, where we assume that the random effect parameters
+# take their estimated values:
+anova(mmod)
+
+# the result is identical to the fixed effects analysis above.
+
+# we can also test for a treatment effect using the maximum likelihood ratio method:
+amod = lmer(yield ~ treat + (1|blend), penicillin, REML = FALSE)
+nmod = lmer(yield ~ 1 + (1|blend), penicillin, REML = FALSE)
+
+anova(amod, nmod)
+# remember, we can only compare models with different fixed effects using ML method
+# This is because in REML, the likelihood of linear combination not involving the
+# fixed parameters is maximised.
+
+# we can improve accuracy with the parametric bootstrap approach.
+# we can generate a response from the null model and use this to compute LRT.
+# We repeat this 1000 times saving LRT each time:
+
+lrstat = numeric(1000)
+
+for(i in 1:1000) {
+  
+  ryield = unlist(simulate(nmod))
+  
+  nmodr = lmer(ryield ~ 1 + (1|blend), penicillin, REML = FALSE)
+  
+  amodr = lmer(ryield ~ treat + (1|blend), penicillin, REML = FALSE)
+  
+  lrstat[i] = 2*(logLik(amodr) - logLik(nmodr))
+  
+}
+
+# Under the standard likelihood theory, the LRT 
+plot(qchisq((1:1000)/1001,3), sort(lrstat), xlab = expression(chi[3]^2),
+     ylab = "Simulated LRT")
+abline(0,1)
+
+# as we can see from the plot, the approximation is not good
+# we can compute aour estimated p-value as:
+mean(lrstat > 4.05)
+
+# which is much closer to the F-test result than the X_3 based approximation
+
+## We can also test for the blends. As wth the fixed analysis, we are 
+# no directly interested in the size of the blocking effects.
+# However, we may wish the examine the blocking effects for information
+# useful for future experiments
+
+# we can compute the LRT:
+rmod = lmer(yield ~ treat + (1|blend), penicillin)
+nlmod = lm(yield ~ treat, penicillin)
+2*(logLik(rmod) - logLik(nlmod, REML = TRUE))
+
+# now we perform parametric bootstrap as before:
+lrstatf = numeric(1000)
+
+for(i in 1:1000) {
+  
+  ryield = unlist(simulate(nlmod))
+  
+  nlmodr = lm(ryield ~ treat, penicillin)
+  
+  rmodr = lmer(ryield ~ treat + (1|blend), penicillin)
+  
+  lrstatf[i] = 2*(logLik(rmodr) - logLik(nlmodr, REML = TRUE))
+  
+}
+
+# again the distribution is far from X^2_1
+mean(lrstatf < 0.00001)
+
+mean(lrstatf > 2.7629)
+# we found a significant blend effect, the p-value is close to 5% though
+# we might wish to increase the number of bootstrap samples to increase
+# our confidence
+
+## In this example, we saw no major advantage in modeling the blocks as random effects
+# so we might prefer to use the fixed effect analysis as it is simpler
+
+#### Split Plots ####
+
+
+# page 184
 
 
 
