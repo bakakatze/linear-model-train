@@ -1745,7 +1745,7 @@ abline(0,0)
 # error variance was constant
 
 #### Blocks as Random Effects ####
- 
+
 # it is important to treat blocks as random effects
 # we illustrate with an experiment to compare four processes: A, B, C, D
 # for the production of penicillin
@@ -1862,8 +1862,85 @@ mean(lrstatf > 2.7629)
 
 #### Split Plots ####
 
+# the difference between split plots and blocks design is that the earlier is used when there is one
+# hard-to-change factor. Like, irrigation system in one plot or land.
 
-# page 184
+# example: 8 fields, 2 types of crops, 4 irrigation methods.
+
+data(irrigation)
+summary(irrigation)
+
+# Irrigation and variety are fixed effects
+# Field is clearly a random effect
+# interaction between field and crop is also random, cause one is random
+
+# We consider this full model: Y_ijk = mu + I_i + V_j + (IV)_ij + F_k + (VF)_jk + e_ijk
+# I = irrigation, V = variety, F = field
+
+# We did not include (IF) term because we only have one type of irrigation used in a given field.
+# It's impossible to estimate such.
+
+lmodr = lmer(yield ~ irrigation * variety + (1|field), data = irrigation)
+logLik(lmodr)
+
+summary(lmodr)
+# the largest variance component is that due to the field effect: 4.02 with residual variance 1.45
+
+# we check the fixed effects for significance:
+anova(lmodr) # no evidence for fixed effect for either irrigation or variety or their interaction
+
+plot(fitted(lmodr), resid(lmodr), xlab = "Fitted", ylab = "Res")
+qqnorm(resid(lmodr), main = "")
+# no problem with non-constat variance
+# so the result is valid
 
 
+#### Nested Effects ####
+
+# example: 4 samples (2 labelled G, 2 labelled H), 6 laboratories, gave 2 samples to 2 different technician,
+# 1 sample divide by half > measure
+
+data(eggs)
+summary(eggs)
+
+# we want to test consistency across labs
+# so we will treat labs as random effects
+
+cmod = lmer(Fat ~ 1 + (1|Lab) + (1|Lab:Technician) + (1|Lab:Technician:Sample), data = eggs)
+summary(cmod)
+
+# let us see if we can simplify by removing the lowest level of variance component
+cmodr = lmer(Fat ~ 1 + (1|Lab) + (1|Lab:Technician), data = eggs)
+summary(cmodr)
+
+anova(cmod, cmodr) # no significant, but the p-value is conservative
+
+VarCorr(cmodr) # the variance from Samples have been absorbed by the other components
+
+# let's check the accuracy of these p-values
+lrstat = numeric(1000)
+
+for(i in 1:1000) {
+  
+  rFat = unlist(simulate(cmodr))
+  
+  nmod = lmer(rFat ~ 1 + (1|Lab) + (1|Lab:Technician), data = eggs)
+  
+  amod = lmer(rFat ~ 1 + (1|Lab) + (1|Lab:Technician) + (1|Lab:Technician:Sample), data = eggs)
+  
+  lrstat[i] = 2*(logLik(amod) - logLik(nmod))
+  
+}
+
+mean(lrstat < 0.00001)
+
+# we can estimate the p-value as:
+2*(logLik(cmod) - logLik(cmodr))
+mean(lrstat > 1.6034) # we can now say that the variation between samples can be ignore
+# we can use the same method to test the variation between technicians
+
+
+#### Crossed Effects ####
+
+# page 190
 
