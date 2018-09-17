@@ -1942,5 +1942,110 @@ mean(lrstat > 1.6034) # we can now say that the variation between samples can be
 
 #### Crossed Effects ####
 
-# page 190
+# full factorial design = all factors are completely crossed
+# if only partially crossed = Crossed effects
+# special case of Crossed effects = latin square design
+
+# Example: 4 materials were fed into wear-testing machine.
+# THe machine can take 4 samples at a time but the position is known to affect the result.
+
+data(abrasion)
+matrix(abrasion$material, 4, 4) # Latin Square!!
+
+# fixed effect analysis
+lmod = aov(wear ~ material + run + position, abrasion)
+summary(lmod)
+
+# we might regard the run and position as random effects
+mmod = lmer(wear ~ material + (1|run) + (1|position), abrasion)
+anova(mmod)
+summary(mmod)
+
+# lmer function is able to recognise that the run and position effects are crossed and fits the model appropriately.
+# the F-test for the fixed effects is almost the same as the corresponding fixed effects analysis.
+# The only differnce is that the fixed effects analysis uses a denominator degrees of freedom sixe while the random effects analysis
+# is made conditional on the esitemated random effects ~ 12 degrees of freedom. The difference is not crucial here.
+
+#### Multilevel Models ####
+
+# Example:
+# Classes within a school (up to four)
+# social class of the father (1~9:: 7 = long term unemployed, 8 = not currently employed, 9 = father absent)
+# raven's test score in year 1, student id number, english test score, math test score, school year (0 = year 1, 2 = year 3)
+
+data(jsp)
+# ignore the data from the first two years
+jspr = jsp[jsp$year == 2,]
+
+
+plot(jitter(math) ~ jitter(raven), data = jspr, xlab = "Raven score", ylab = "Math score")
+boxplot(math ~ social, data = jspr, xlab = "Social class", ylab = "Math score")
+
+# one possible approach: multiple linear regression
+glin = lm(math ~ raven * gender * social, jspr)
+anova(glin)
+
+# remove gender
+glin = lm(math ~ raven * social, jspr)
+anova(glin)
+
+# remove raven*social interaction even though it is significant, we have a large dataset
+glin = lm(math ~ raven + social, jspr)
+summary(glin)
+
+## The above analysis assumes the students are from independent observations, but they are not!
+# they come from 50 different schools. If we ignore this, we will overstate the significance.
+table(jspr$school)
+
+# let's try: random effects of school and the social class is nested within school
+mmod = lmer(math ~ raven * social * gender + (1|school) + (1|school:class), jspr)
+anova(mmod)
+
+# gender is still not significant, drop it
+# center the raven score, so that we can interpret social factor at the mean raven score instead of raven score of 0
+jspr$craven = jspr$raven - mean(jspr$raven)
+mmod = lmer(math ~ craven * social + (1|school) + (1|school:class), jspr)
+anova(mmod)
+summary(mmod)
+
+# standard diagnostics:
+qqnorm(resid(mmod), main = "")
+plot(fitted(mmod), resid(mmod), xlab = "Fitted", ylab = "Residuals")
+# hmmm... lower variance at the tail of predicted math score
+
+# check assumption of normally distributed random effects
+qqnorm(ranef(mmod)$school[[1]], main = "school effects")
+qqnorm(ranef(mmod)$"school:class"[[1]], main = "class effects")
+# approximately normal
+
+## see sorted school effects
+adjscores = ranef(mmod)$school[[1]]
+
+# compare this with an adjusted ranking that simply takes the average score achieved by the school, centered by the overall average:
+rawscores = coef(lm(math ~ school - 1, jspr)) #without intercept
+rawscores = rawschores-mean(rawscores)
+
+# plot this
+plot(rawscores, adjscores)
+sint = c(1,9,14,29)
+text(rawscores[sint], adjscores[sint] + 0.2, c("1","9","15","30"))
+
+## Compositional effects
+# fixed effect predictors in this example so far have been at the lowest level, the student, but it is not improbable that factors
+# at the school or class level might be important predictors of success in math test.
+# We can construct such predictors from the individual-level information; such factors are called compositional effects.
+# For example, the average entering score for a school might be an important predictor.
+
+schraven = lm(raven ~ school, jspr)$fit
+
+mmodc = lmer(math ~ craven * social + schraven * social + (1|school) + (1|school:class), jspr)
+anova(mmodc)
+# not significant, meh
+
+#### Exercise ####
+
+# page 199
+
+
+
 
