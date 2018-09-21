@@ -2042,10 +2042,122 @@ mmodc = lmer(math ~ craven * social + schraven * social + (1|school) + (1|school
 anova(mmodc)
 # not significant, meh
 
-#### Exercise ####
+#### Exercise ch8 ####
 
-# page 199
+### pulp dataset questions
+data(pulp)
+
+# fixed effect model
+lmod = lm(bright ~ operator, pulp)
+summary(lmod)
+
+# random intercept at operator level model
+mmod = lmer(bright ~ (1|operator), pulp)
+summary(mmod)
+
+# intra-class correlation
+0.06808/(0.06808+0.10625)
 
 
+# likelihood ratio test with null model
+null = lm(bright ~ 1, pulp)
+2*(logLik(mmod) - logLik(null, REML = TRUE))
 
+
+# calculate the p-value using bootstrap method
+lrstat = numeric(1000)
+
+for(i in 1:1000) {
+  
+  rbr = unlist(simulate(null))
+  
+  nulls = lm(rbr ~ 1, pulp)
+  
+  mmods = lmer(rbr ~ (1|operator), pulp)
+  
+  lrstat[i] = 2*(logLik(mmods) - logLik(nulls))
+  
+}
+
+mean(lrstat > 3.470148)
+
+#
+#### CH 10: Repeated Measures and Longitudinal Data ####
+
+# some math here
+
+#### Longitudinal Data ####
+# panel study with participants who were aged 25-39 in 1968 and had been followed up for at least 11 years
+data(psid)
+head(psid)
+
+# let's plot the data
+require(lattice)
+
+xyplot(income ~ year | person, psid, type = "l", subset = (person <21), strip = FALSE)
+
+# income is more naturally considered on a log-scale
+xyplot(log(income+100) ~ year | sex, psid, type = "l")
+
+# we could fit a line to each subject starting with the first
+# predictor is centered at 1978 instead of 1990
+lmod = lm(log(income) ~ I(year-78), subset = (person==1), psid)
+coef(lmod)
+
+# now lets fit the line for each subject
+slopes = numeric(85)
+intercepts = numeric(85)
+
+for(i in 1:85) {
+  
+  lmod = lm(log(income) ~ I(year-78), subset = (person == i), psid)
+  
+  intercepts[i] = coef(lmod)[1]
+  
+  slopes[i] = coef(lmod)[2]
+  
+}
+
+plot(intercepts, slopes, xlab = "intercept", ylab = "slope")
+psex = psid$sex[match(1:85, psid$person)]
+boxplot(split(slopes, psex))
+
+
+# t-test
+t.test(slopes[psex == "M"], slopes[psex == "F"])
+# women has higher growth rate than men
+
+## test the intercept
+t.test(intercepts[psex == "M"], intercepts[psex == "F"])
+# men has higher income
+
+## These analysis is called a response feature analysis.
+# by choosing an important characteristic we can do simpler analysis using
+# standard techniques. but this is often not desirable because we lose change
+# over time effect
+require(lme4)
+
+psid$cyear = psid$year - 78 # center the year to its median
+
+mmod = lmer(log(income) ~ cyear * sex + age + educ + (cyear|person), psid)
+summary(mmod)
+
+# we can examine the residuals by sex
+qqmath(~resid(mmod) | sex, psid)
+
+
+# we can also plot the residuals and fitted values, broken education down into three levels
+xyplot(resid(mmod) ~ fitted(mmod) | cut(educ, c(0, 8.5, 12.5, 20)), psid,
+       layout = c(3,1), xlab = "fitted", ylab = "residuals")
+# more variability on the lower end
+
+#### Repeated Measures ####
+
+# Acuity of vision for seven subjects was tested. The response is the lag in
+# miliseconds between light flas and a response in the cortex of the eye. Each
+# eye is tested at four different powers of lens.
+
+data(vision)
+head(vision)
+# page 210
 
