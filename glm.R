@@ -13,6 +13,8 @@ library(splines)
 library(survival)
 library(factoextra) # to do correspondence analysis / cluster analysis
 
+library(lattice) # to do easy scatter plots
+
 
 #
 ##### CH1: Introduction & data overview #####
@@ -2159,5 +2161,38 @@ xyplot(resid(mmod) ~ fitted(mmod) | cut(educ, c(0, 8.5, 12.5, 20)), psid,
 
 data(vision)
 head(vision)
-# page 210
+vision$npower = rep(1:4, 14) # complement the power so that we can see what happens with increasing power
+
+xyplot(acuity ~ npower | subject, vision, type = "l", groups = eye, lty = 1:2, layout=c(4,2))
+# left eye = solid line, right eye = dashed line
+# lens power: 1 = 6/6; 2 = 6/18; 3 = 6/36; 4 = 6/60
+
+
+# lets build the model
+mmod = lmer(acuity ~ power + (1|subject) + (1|subject:eye), vision) # L/R eye should be nested within a subject
+summary(mmod)
+# High ICC in general. Stronger correlation for between measurements on the same
+# subject than betwen left and right eyes of the same individual.
+
+anova(mmod)
+
+# we we omit subject #6 and refit the data:
+mmodr = lmer(acuity ~ power + (1|subject) + (1|subject:eye), vision, subset = -43)
+anova(mmodr) # stronger
+summary(mmodr)
+
+# now it is significant, although it appears this is due to an effect at the highest level only.
+# we can test this hypothesis by using Helmert contrasts:
+op = options(contasts = c("contr.helmert", "contr.poly"))
+mmodr = lmer(acuity ~ power + (1|subject) + (1|subject:eye), vision, subset = -43)
+summary(mmodr)
+
+plot(resid(mmodr) ~ fitted(mmodr), xlab = "fitted", ylab = "residuals")
+abline(h=0)
+qqnorm(ranef(mmodr)$"subject:eye"[[1]], main = "")
+
+#
+#### Multiple Response Multilevel Models ####
+
+# page 214
 
