@@ -2084,7 +2084,7 @@ for(i in 1:1000) {
 mean(lrstat > 3.470148)
 
 #
-#### CH 10: Repeated Measures and Longitudinal Data ####
+#### CH 9: Repeated Measures and Longitudinal Data ####
 
 # some math here
 
@@ -2194,5 +2194,50 @@ qqnorm(ranef(mmodr)$"subject:eye"[[1]], main = "")
 #
 #### Multiple Response Multilevel Models ####
 
-# page 214
+# English and Math test results from students. We can analyse both simultaneously to obtain additional information.
+data(jsp)
+
+# we then set up the data so that it display one test score per line with a factor that indicates the subject (English/Math).
+# then we scale the English and Math scores by their maximum possible values, 100 and 40, respectively.
+jspr = jsp[jsp$year == 2, ]
+mjspr = data.frame(rbind(jspr[, 1:6], jspr[, 1:6]),
+                   subject = factor(rep(c("english", "math"), c(953, 953))),
+                   score = c(jspr$english/100, jspr$math/40))
+
+xyplot(score ~ raven | subject * gender, mjspr)
+
+# Now, let's fit a model that includes all the variables of interests
+mjspr$craven = mjspr$raven - mean(mjspr$raven) # mean centered
+
+mmod = lmer(score ~ subject*gender + craven*subject + social + (1|school) + (1|school:class) + (1|school:class:id),
+            mjspr)
+
+# test for fixed effects:
+anova(mmod)
+
+summary(mmod)
+## fixed effects:
+# match subject scores 37% higher than English scores
+# On english test (reference level), girl scores 6.5% higher than boys
+# On math test, girl scores 6.5-5.9 = 0.6% higher than boys (negligible)
+
+## random effects:
+# covariance for the residual scores for the two tests:
+0.1013^2 / (0.1013^2 + 0.1166^2)
+# 0.43 = positive correlation between scores
+
+# diagnostic plots
+xyplot(residuals(mmod) ~ fitted(mmod)|subject,
+       mjspr,
+       pch = ".",
+       xlab = "fitted", ylab = "residuals")
+# greater variance in english scores
+# there is a truncation effect of maximum score in math scores
+
+#### CH 10: Mixed Effect Models for Non-Normal Responses ####
+
+
+# page 221
+
+
 
