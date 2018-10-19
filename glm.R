@@ -7,7 +7,7 @@ library(ggfortify)
 library(MASS) # glm
 library(nnet) # multinomial
 library(lme4) # multilevel model
-library(geepack) # generalised estimating equation
+library(gee) # generalised estimating equation
 
 library(splines)
 
@@ -2302,13 +2302,51 @@ summary(gg)
 # the effect of the predictors averaged across all individuals with the same
 # predictor values. GEE models the correlation at the marginal / correlation level.
 
-# page 226
+
+## Let's consider another GEE example:
+# 59 people with epilepsy. 8 weeks period: number of seizures
+# 2 groups: Progabide (31 patients) and placebo (28 patients).
+# Then they were observed for four 2-week periods and the number of sesizures.
+data(epilepsy)
+
+epilepsy[1:10, ]
+
+with(epilepsy, by(seizures/timeadj, list(treat, expind), mean))
+
+## let's plot the difference between treatment and control
+y = matrix(epilepsy$seizures, nrow = 5)
+matplot(1:4, sqrt(y[-1, ]),
+        type = "l",
+        lty = epilepsy$treat[5*(1:59)]+1,
+        xlab = "period", ylab = "sqrt(seizures)")
+# solid lines = treatment
+# dotted lines = placebo
+
+## let's plot the baseline rate of the two groups
+my = apply(y[-1, ], 2, mean)/2
+plot(sqrt(epilepsy$seizures[epilepsy$expind == 0]/8), sqrt(my),
+     pch = epilepsy$treat[5*(1:59)]+2,
+     xlab = "sqrt(baseline seizures)",
+     ylab = "sqrt(experiment seizures")
+abline(0,1)
+# + = treatment group
+# triangle = placebo group
+
+## if treatment effect exists, it is not readily apparent.
+# let's fit the GEE model!!
+# exclude #49 due to extreme results
+# we use AR(1) model of correlation structure
+
+g = gee(seizures ~ offset(log(timeadj)) + expind + treat + I(expind*treat),
+        id, family = poisson, corstr = "AR-M", Mv = 1, data = epilepsy, subset = (id != 49))
+summary(g)
+
+# errr how to interpret this...
 
 
+#### CH 11: Nonparametric Regression ####
 
-
-
-
+# page 232
 
 
 
