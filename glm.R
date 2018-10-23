@@ -2085,11 +2085,11 @@ for(i in 1:1000) {
 mean(lrstat > 3.470148)
 
 #
-#### CH 9: Repeated Measures and Longitudinal Data ####
+##### 9 Repeated Measures and Longitudinal Data ####
 
 # some math here
 
-#### Longitudinal Data ####
+#### 9.1 Longitudinal Data ####
 # panel study with participants who were aged 25-39 in 1968 and had been followed up for at least 11 years
 data(psid)
 head(psid)
@@ -2154,7 +2154,7 @@ xyplot(resid(mmod) ~ fitted(mmod) | cut(educ, c(0, 8.5, 12.5, 20)), psid,
        layout = c(3,1), xlab = "fitted", ylab = "residuals")
 # more variability on the lower end
 
-#### Repeated Measures ####
+#### 9.2 Repeated Measures ####
 
 # Acuity of vision for seven subjects was tested. The response is the lag in
 # miliseconds between light flas and a response in the cortex of the eye. Each
@@ -2193,7 +2193,7 @@ abline(h=0)
 qqnorm(ranef(mmodr)$"subject:eye"[[1]], main = "")
 
 #
-#### Multiple Response Multilevel Models ####
+#### 9.3 Multiple Response Multilevel Models ####
 
 # English and Math test results from students. We can analyse both simultaneously to obtain additional information.
 data(jsp)
@@ -2235,7 +2235,7 @@ xyplot(residuals(mmod) ~ fitted(mmod)|subject,
 # greater variance in english scores
 # there is a truncation effect of maximum score in math scores
 
-#### CH 10: Mixed Effect Models for Non-Normal Responses ####
+##### 10 Mixed Effect Models for Non-Normal Responses ####
 
 # A study is conducted to study the effects of surface and vision on balance.
 # Surface = foam or normal
@@ -2273,7 +2273,7 @@ summary(gg)
 
 # ugh
 
-#### Generalised Estimating Equations ####
+#### 10.1 Generalised Estimating Equations ####
 
 # Let Y_i be a vector of random variables representing the responses on a given individual.
 # Let E(Y_i) = mu_i   which is linked to linear predictor eta = X * beta
@@ -2344,9 +2344,61 @@ summary(g)
 # errr how to interpret this...
 
 
-#### CH 11: Nonparametric Regression ####
+##### 11 Nonparametric Regression ####
 
-# page 232
+# Now, we want to extend this method so that it can accommodate non-normality (non-parametric)
+
+# So, the nonparametric approach will choose a function (f) from some smooth
+# family of functions. We do still need to make some assumptions about (f), but
+# these restrictions are far less limiting than the parametric way.
+
+# Downside: Interpretation is confusing. Need to use graphs and simulations.
+
+
+## Let's rumble: use one real data (Old Faithful) and two simulated data (exa, exb)
+data(exa)
+plot(y ~ x, exa, main = "example A", pch =".")
+lines(m ~ x, exa)
+
+data(exb)
+plot(y ~ x, exb, main = "example B", pch = ".")
+lines(m ~ x, exb)
+
+data(faithful)
+plot(waiting ~ eruptions, faithful, main = "old Faithful", pch = ".")
+
+# Let's examine several widely used nonparametric regression estimators, also known as smoothers.
+
+#### 11.1 Kernel Estimators ####
+
+## Kernel density estimator link: https://mathisonian.github.io/kde/
+# f_hat(x) = 1/(n*lambda) * SUM(j to n){ K((x-x_j)/lambda)) * Y_j }
+#          = 1/n * SUM(j to n){ w_j * Y_j}
+#
+# where: w_j = K((x-x_j)/lambda)) / lambda
+#
+# basically integrate(K) = 1; all the weights must sum to 1
+# lambda is the bandwidth, i.e. how many data points you should include in the kernel
+
+## The optimal choice of lambda, gives:
+# MSE(x) = E( f(x) - f_hat_lambda(x) )^2 = O( n^(-4/5) )
+# 
+# So, the relative difference between the MSE will become larger as n increases.
+# But, the nonparametric estimator cannot do better than O( n^(-4/5) ).
+
+
+## Choice of Kernel
+
+# page 234
+
+
+
+
+
+
+
+
+
 
 
 
