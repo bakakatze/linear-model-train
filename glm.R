@@ -16,6 +16,8 @@ library(factoextra) # to do correspondence analysis / cluster analysis
 
 library(lattice) # to do easy scatter plots
 
+library(sm) # smoothing algorithm
+
 
 #
 ##### CH1: Introduction & data overview #####
@@ -2388,18 +2390,49 @@ plot(waiting ~ eruptions, faithful, main = "old Faithful", pch = ".")
 
 
 ## Choice of Kernel
-
-# page 234
-
+# Usually use Epanechnikov kernel. This kernel has the advantage of some smoothness, compactness, and rapid computation.
 
 
+## Choice of smoothing parameter lambda
+# this is more important than choice of kernel.
+# too small = the estimator will be to rought.
+# too large = the estimator will smooth too many data points.
 
+# let's try Nadaraya-Watson estimator
 
+# bandwidth = 0.1
+plot(waiting ~ eruptions, faithful, main = "bandwidth = 0.1", pch=".")
+lines(ksmooth(faithful$eruptions, faithful$waiting, "normal", 0.1))
 
+# bandwidth = 0.5
+plot(waiting ~ eruptions, faithful, main = "bandwidth = 0.5", pch=".")
+lines(ksmooth(faithful$eruptions, faithful$waiting, "normal", 0.5))
 
+# bandwidth = 2
+plot(waiting ~ eruptions, faithful, main = "bandwidth = 2", pch=".")
+lines(ksmooth(faithful$eruptions, faithful$waiting, "normal", 2))
 
+# It is acceptable to choose smoothing subjectively by trying different bandwidth and plot them.
+# But, if a large number of smooths are necessary, automation is desirable. Also,
+# if there are cases where the statistician want to avoid explicit appearance of subjectivity.
 
+# Automatic general-purpose method: Cross-validation (CV)
 
+# you can use sm package to choose the bandwidth
+hm = hcv(faithful$eruptions, faithful$waiting, display = "lines")
+hm
+
+sm.regression(faithful$eruptions, faithful$waiting, h = hm, xlab = "eruptions", ylab = "waiting")
+# the sm package use Gaussian kernel
+
+# let's do it again for example A
+hm = hcv(exa$x, exa$y, display = "lines")
+sm.regression(exa$x, exa$y, h=hm, xlab = "x", ylab = "y")
+#
+
+#### 11.2 Splines ####
+
+# page 239
 
 
 
