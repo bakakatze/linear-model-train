@@ -661,7 +661,7 @@ modn = glm.nb(skips~., solder)
 summary(modn)
 
 #
-#### CH4: Contingency Tables ####
+##### CH4: Contingency Tables ####
 
 # create the data: it is about the existence of particle in wafers
 # and its association with good or bad quality
@@ -990,7 +990,7 @@ deviance(ormodb)
 deviance(ormod)
 # better! this means we may be able to reduce/simplify the education categories
 
-#### CH 5: Multinomial Data ####
+##### CH 5: Multinomial Data ####
 data(nes96)
 
 sPID = nes96$PID
@@ -1213,7 +1213,7 @@ cbind(dems, demind-dems, 1-demind)
 
 # to use the cloglog method, just put "cloglog" under method
 
-#### CH6: Generalised Linear Models ####
+##### CH6: Generalised Linear Models ####
 
 # let's see how the fitting algorithm works (Iteratively Reweighted Least Squares [IRWLS])
 data(bliss)
@@ -1448,7 +1448,7 @@ summary(logitmod)
 
 
 #
-#### CH7: Other Generalised Linear Models (GLMs) ####
+##### CH7: Other Generalised Linear Models (GLMs) ####
 
 
 # Gamma GLM
@@ -1611,7 +1611,7 @@ halfnorm(cooks.distance(modl), labs = ll)
 plot(predict(modl), residuals(modl, type = "pearson"), xlab = "Linear Predictor", ylab = "Pearson Residuals")
 
 #
-#### CH8: Random Effects ####
+##### CH8: Random Effects ####
 
 # let's start with the simplest possible random effects model
 # one-way ANOVA with 'a' factor at 'a' levels
@@ -2432,7 +2432,152 @@ sm.regression(exa$x, exa$y, h=hm, xlab = "x", ylab = "y")
 
 #### 11.2 Splines ####
 
-# page 239
+## Smoothing splines:
+# Assume the model is: y_i = f(x_i) + E_i
+# in the spirit of least squares, we might choose hat(f) to minimise the MSE: (1/n) SUM{ ( y_i - f(x_i) )^2 }
+# the solution is hat(f(xi)) = y_i <<< but this is useless and too rough
+
+# Instead:
+# 1/n * SUM{((Y_i - f(xi))^2} + lambda integrate{f"(x)^2}dx
+# lambda is the smoothing parameter
+# the integration is a roughness penalty, when f is rough the penalty is large and vice versa
+
+# in R, cross-validation is used to select the smoothing parameter by default
+
+# example A (good)
+plot(y ~ x, exa, pch = ".")
+lines(exa$x, exa$m)
+lines(smooth.spline(exa$x, exa$y), lty = 2)
+
+# example B (bad parameter given by cross-validation)
+plot(y ~ x, exb, pch = ".")
+lines(exb$x, exb$m)
+lines(smooth.spline(exb$x, exb$y), lty=2) # disaster
 
 
+## Regression Splines:
+
+# construct the spline
+rhs = function(x,c) ifelse(x>c, x-c, 0)
+curve(rhs(x, 0.5), 0.1)
+
+# define knots
+knots = 0:9/10
+knots
+
+# compute a design matrix of splines with knots at these points for each x
+dm = outer(exa$x, knots, rhs)
+matplot(exa$x, dm, type = "l", col=1)
+
+# compute and display the regression fit
+g = lm(exa$y ~ dm)
+plot(y ~ x, exa, pch = ".", xlab = "x", ylab = "y")
+lines(exa$x, predict(g))
+# the basis function is piecewise linear, that is why it's jagged
+
+
+newknots = c(0, 0.5, 0.6, 0.8, 0.95) # fewer knots, sharper turns at the end
+dmn = outer(exa$x, newknots, rhs)
+gn = lm(exa$y ~ dmn)
+plot(y ~ x, exa, pch=".", xlab = "x", ylab = "y")
+lines(exa$x, predict(gn))
+# now I understand, this add a constant Beta coef after each knot (this becomes piecewise linear model at each step of the knots)
+
+
+## we can get smoother fit by using higher-order splines
+require(splines)
+
+# the default is cubic B-splines (proportional distance between knots depending on the degree of freedom)
+matplot(bs(seq(0,1,length = 1000), df = 12), type = "l", ylab = "", col = 1)
+
+# now we can use least squares to determine the coefficients
+sml = lm(y ~ bs(x, 12), exa)
+plot(y ~ x, exa, pch = ".")
+lines(m ~ x, exa)
+lines(predict(sml) ~ x, exa, lty = 2)
+
+# much smoother, but we can still do better by placing more knots at the points of high curvature
+# and fewer in the flatter region
+
+#### 11.3 Local Polynomials ####
+
+# both the kernel and spline methods have been relatively vulnerable to outliers.
+# we can fit a polynomial function to a specified window using robust methods.
+# The predicted response at the middle of the window is the fitted value.
+# We then simply slide the windo over the range of the data, repeating the fitting process as the window moves.
+# This typically is called lowess or loess.
+
+plot(waiting ~ eruptions, faithful, pch = ".")
+f = loess(waiting ~ eruptions, faithful)
+i = order(faithful$eruptions)
+lines(f$x[i], f$fitted[i])
+
+# For Example A, the default choice is too large.
+plot(y ~ x, exa, pch = ".")
+lines(exa$x, exa$m, lty = 1)
+
+f = loess(y ~ x, exa)
+lines(f$x, f$fitted, lty = 2)
+
+f = loess(y ~ x, exa, span = 0.22) # we modify the span
+lines(f$x, f$fitted, lty = 3)
+
+# The optimal choice of span is one (all data). This is not surprising since the
+# true function is a constant and so maximal smoothing is desired. We can see
+# that the robust qualities of loess prevent the fit from becoming too distorted
+# by the two outliers even with the default choice of smoothing span.
+plot(y ~ x, exb, pch = ".")
+
+f = loess(y ~ x, exb)
+lines(f$x, f$fitted, lty = 2)
+
+f = loess(y ~ x, exb, span = 1)
+lines(f$x, f$fitted, lty = 3)
+
+lines(exb$x, exb$m)
+
+#
+#### 11.4 Wavelets ====
+
+# Regression splines are an example of a basis function approach to fitting.
+# We approximate the curve by a family of basis functions
+require(wavethresh)
+
+wds = wd(exa$y)
+
+plot(wds, main = "")
+# this is the wavelet coefficients from the decomposition
+
+# for example, suppose we want to smooth the data extensively.
+# we would throw away all the coefficients fo level four or higher and then reconstruct the function as follows:
+wtd = threshold(wds, policy = "manual", value = 9999)
+fd = wr(wtd)
+# only level three and higher coefficients are retained.
+# there are only 2^3 = 8 of these.
+# The thresholding here applies to level four and higher by default. Any coef less than 9999 in absolute value is set to zero.
+# the 'wr' reverses the wavelet transform
+
+plot(y ~ x, exa, pch=".")
+lines(m ~ x, exa)
+lines(fd ~ x, exa, lty = 5)
+
+
+# instead of throwing away the higher-order coeff, we could zero out only the small coeff
+wtd2 = threshold(wds)
+fd2 = wr(wtd2)
+
+plot(y ~ x, exa, pch = ".")
+lines(m ~ x, exa)
+lines(fd2 ~ x, exa, lty = 5)  
+  
+#
+##### CH12: Additive Models ####
+
+# This is used for non-parametric modelling approaches by fitting splines
+
+#### 12.1 Additive Models using the gam package ====
+
+# page 256
+
+  
 
