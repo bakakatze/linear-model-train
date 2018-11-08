@@ -2573,11 +2573,195 @@ lines(fd2 ~ x, exa, lty = 5)
 #
 ##### CH12: Additive Models ####
 
-# This is used for non-parametric modelling approaches by fitting splines
+# This is used for non-parametric modelling approaches by fitting splines.
+# This is like a model between total parametric vs. total non-parametric.
+# Cause in between the splines you can fit parametric model.
 
 #### 12.1 Additive Models using the gam package ====
 
-# page 256
+# We use data from a study of the relationship between atmospheric ozone
+# concentration (O3) and other meteorological variables in LA in 1976. To
+# simplify, we use 3 predictors: temperature (temp), inversion base height at
+# LAX (ibh), and inversion top temperature at LAX (ibt)
 
-  
+# let's try simple linear model first
+data(ozone)
+olm = lm(O3 ~ temp + ibh + ibt, ozone)
+summary(olm)
+
+plot(ozone$temp, ozone$O3)
+plot(ozone$ibh, ozone$O3)
+plot(ozone$ibt, ozone$O3)  
+
+# ibt is not significant here
+# Let's try additive model using Gaussian as response
+require(gam)
+
+amgam = gam(O3 ~ lo(temp) + lo(ibh) + lo(ibt), data = ozone)
+summary(amgam)
+
+# we have used the loess smoother here by specifying the lo in the model formula
+# The fit is better than the linear model
+
+## The gam package uses a score test for the predictors.
+# However, p-values are only approximate at best and it's generally better
+# to fit the model without the predictor of interest and then construct the F-test
+amgamr = gam(O3 ~ lo(temp) + lo(ibh), data = ozone)
+anova(amgamr, amgam, test = "F")
+
+# yep, ibt is bot significant
+# Now, we examine the fit:
+plot(amgam, residuals = TRUE, se = TRUE, pch = ".")
+
+# we see that for ibt, a constant function would fit between the confidence interval
+# this reinforces the conclusion that this predictor is not significant
+# for temp, we can see a change in the slope around 60 centigrade,
+# while ibh has a clear maximum
+
+#### 12.2 Additive Models using mgcv ====
+
+# this pacakge allows automatic smoothing
+# only need to choose the splines
+require(mgcv)
+
+ammgcv = gam(O3 ~ s(temp) + s(ibh) + s(ibt), data = ozone)
+summary(ammgcv)
+
+plot(ammgcv)
+
+# similar to gam
+# Now, we want to test if linear temperature is better
+am1 = gam(O3 ~ s(temp) + s(ibh), data = ozone)
+am2 = gam(O3 ~ temp + s(ibh), data = ozone)
+anova(am2, am1, test = "F")
+
+# Now, suppose that there is an interaction between temp and ibh
+amint = gam(O3 ~ s(temp, ibh) + s(ibt), data = ozone)
+summary(amint)
+
+# we compare this with previous model
+anova(ammgcv, amint, test = "F")
+
+# we see that the supposedly more complex model with the bivariate fit actually
+# fits worse than the model with univariate functions. This is because fewer
+# degrees of freedom have been used to fit the vicariate function than the two
+# corresponding univariate functions. In spite of the p-value, we suspect that
+# there is no interation effect, because the fitting algorithm is able to fit
+# the bivariate function so simply.
+
+plot(amint)
+vis.gam(amint, theta = -45, color = "gray")
+
+# Hmmm no significant interaction
+
+# One use of additive models is as an exploratory tool for standard parametric regression modeling.
+# We can use the fitted functions to help us find suitable simple transformations of the predictors.
+# One idea here is to model the temp and ibh effects using piecewise linear regression:
+# We define right and left "hockey-stick" functions:
+rhs = function(x, c) ifelse(x > c, x-c, 0)
+lhs = function(x, c) ifelse(x < c, c-x, 0)
+
+# Now, we fit a parametric model using cutpoints of 60 for temp and 1000 for ibh.
+olm2 = lm(O3 ~ rhs(temp, 60) + lhs(temp, 60) + rhs(ibh, 1000) + lhs(ibh, 1000), ozone)
+summary(olm2)
+
+# the piecewise-linear fit is about the same as the additive model. but we
+# wouldn't have known if we had not used the additive models to deterimine the
+# splines.
+
+# We can use the additive models for inference in their own right:
+predict(ammgcv, data.frame(temp = 60, ibh = 2000, ibt = 100), se = T)
+
+# If we try to make predictions for predictor values outside the original range of the data,
+# we will need to linearly extrapolate the spline fits. (this is dangerous as usual)
+predict(ammgcv, data.frame(temp = 120, ibh = 2000, ibt = 100), se = T)
+
+# the standard error sucks
+
+## Diagnostic plots
+plot(predict(ammgcv), residuals(ammgcv), xlab = "Predicted", ylab = "Residuals")
+qqnorm(residuals(ammgcv), main = "")
+
+## Now let's see the model for the full dataset. We found that the ibh and ibt terms were insignificant so we removed them:
+amred = gam(O3 ~ s(vh) + s(wind) + s(humidity) + s(temp) + s(dpg) + s(vis) + s(doy), data = ozone)
+summary(amred)
+
+# we achieve a good fit with R^2 of 80.5% but at the cost of 19.4 parameters including the intercept
+
+#### 12.3 Generalized Additive Models ====
+
+# GLM uses iterative reweighted least squares (IRWLS) fitting algorithm
+# The are two levels of iteration: The GLM part and the additive model part
+
+# The ozone data has a response with small integer values and non-constant variance
+# we can try Poisson model
+gammgcv = gam(O3 ~ s(temp) + s(ibh) + s(ibt), family = poisson, scale = -1, data = ozone)
+summary(gammgcv)
+
+# scale = -1 means that the dispersion parameter should be estimated and not fixed.
+
+plot(gammgcv, residuals = TRUE)
+# similar
+
+#### 12.4 Alternating Conditional Expectations ====
+
+# transform both sides framework
+
+require(acepack)
+
+x = ozone[, c("temp", "ibh", "ibt")]
+
+acefit = ace(x, ozone$O3)
+# this will produce ty and tx (a matrix whose columns contain the transformed predictors)
+
+summary(lm(acefit$ty ~ acefit$tx))
+# R2 = 0.726
+# it is better than the original model and is comparable to the additive model (R2 = 0.703)
+
+plot(ozone$O3 ~ acefit$ty, xlab = "O3", ylab = expression(theta(O3)))
+plot(x[,1],acefit$tx[,1],xlab="temp",ylab="f(temp)")
+plot (x[,2],acefit$tx[,2],xlab="ibh",ylab="f(ibh)")
+plot(x[,3],acefit$tx[,3],xlab="ibt",ylab="f(ibt)")
+# the transformation on temp and ibh are similar to the additive model
+# the ibt is rough
+
+# Now, let's see how we do on the full data
+x = ozone[, -1]
+acefit= ace(x, ozone$O3)
+summary(lm(acefit$ty ~ acefit$tx))
+
+# A very good fit, but we must be cautious.
+# It is possible that the ACE model overfitting the data by using implausible transformations as seen on ibt variable
+# ACE consider the problem of choosing theta and f(x) such that theta(Y) and SUM_j f_j(X_j) are maximally correlated.
+# Thus, ACE can be viewed as correlation method rather than regression.
+
+y = cbind(ozone$O3, ozone$O3^2, sqrt(ozone$O3))
+x = ozone[ ,c("temp", "ibh", "ibt")]
+cancor(x, y)
+
+#
+#### 12.5 Additivity and Variance Stabilization ====
+
+# page 268, too lazy
+
+#### 12.6 Generalized Additive Mixed Models ====
+
+data(epilepsy)
+
+egamm = gamm(seizures ~ treat * expind + s(age), family = poisson, random = list(id = ~1),
+             data = epilepsy,
+             subset = (id!=49))
+summary(egamm$gam)
+# age not significant
+# treatment is significant similar to the previous analysis
+
+#### 12.7 Multivariate Adaptive Regression Splines (MARS) ====
+
+# page 272, too lazy
+# I guess at least I know this exists and can revisit this in the future if necessary
+
+##### CH13: Trees ####
+
+# page 278
+
 
