@@ -2757,9 +2757,63 @@ summary(egamm$gam)
 
 #### 12.7 Multivariate Adaptive Regression Splines (MARS) ====
 
-# page 272, too lazy
-# I guess at least I know this exists and can revisit this in the future if necessary
+require(mda)
+# Hockey-stick function, when interactions are not allowed this will be equivalent to additive model.
+# The MARS model is relatively good if you have a lot of interactions and variables.
+data(ozone)
 
+a = mars(ozone[,-1], ozone[,1])
+# The default choice allows only additive (first-order) predictors and chooses the model size using the GCV criterion.
+
+summary(lm(ozone[,1] ~ a$x-1))
+# R2 = 0.93
+
+# Let's reduce the model size
+a = mars(ozone[,-1], ozone[,1], nk = 7)
+summary(lm(ozone[,1] ~ a$x-1))
+
+# the fit is worse but we still haven't added any interaction ter,s.
+a = mars(ozone[,-1], ozone[,1], nk = 10, degree = 2)
+summary(lm(ozone[,1] ~ a$x - 1))
+
+# MARS carefully select the interaction terms to include.
+# Let's see how the terms are chosen.
+a$factor[a$selected.terms,]
+# 1 = right hockey stick, -1 = left hockey stick The frist term, given by first
+# row is the intercept and involves no variables. the seventh and sixth just the
+# doy. Depicting the effect of doy and ibh just requires plotting the
+# transformation as a function of the predictor.
+
+plot(ozone[,6], a$x[,4]*a$coef[4], xlab = "ibh", ylab = "Contribution of ibh")
+
+plot(ozone[,10], a$x[,7]*a$coef[7] + a$x[,6]*a$coef[6], xlab = "day", ylab = "contribution of day")
+
+## Temp and humidity have an interaction so we must combine all terms involving
+## these. Our approach is to compute the predicted value of the response over a
+## grid of values where temp and humidity are varied while other predictors are
+## held constant at the median.
+
+humidity = seq(10,100, len=20)
+temp = seq(20,100, len = 20)
+medians = apply(ozone, 2, median)
+pdf = matrix(medians, nrow = 400, ncol = 10, byrow = T)
+pdf[,4] = rep(humidity, 20)
+pdf[,5] = rep(temp, rep(20,20))
+
+pdf = as.data.frame(pdf)
+names(pdf) = names(medians)
+z = predict(a, pdf[, -1])
+zm = matrix(z, ncol = 20, nrow = 20)
+
+contour(humidity, temp, zm, xlab = "humidity", ylab = "temperature")
+persp(humidity, temp, zm, xlab = "humidity", ylab = "temperature", zlab = "ozone", theta = 90)
+
+# now check the diagnostics
+qqnorm(a$res, main = "")
+plot(a$fit, a$res, xlab = "fitted", ylab = "residual")
+
+
+#
 ##### CH13: Trees ####
 
 require(rpart)
