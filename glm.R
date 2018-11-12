@@ -9,9 +9,9 @@ library(nnet) # multinomial
 library(lme4) # multilevel model
 library(gee) # generalised estimating equation
 
-library(splines)
+library(splines) # to find number of splines
 
-library(survival)
+library(survival) # to do survival analysis
 library(factoextra) # to do correspondence analysis / cluster analysis
 
 library(lattice) # to do easy scatter plots
@@ -2762,6 +2762,188 @@ summary(egamm$gam)
 
 ##### CH13: Trees ####
 
-# page 278
+require(rpart)
+
+#
+#### 13.1 Regression Trees ====
+
+# Regression trees are similar to additive models in that they represent a
+# compromise between the linear model and the completely nonparametric approach.
+# read more at = https://en.wikipedia.org/wiki/Decision_tree_learning
+
+# For brevity: split the data into two, calculate residual sum of squared (RSS), find the least RSS iteratively,
+# do sub-partition within existing partition, recalculate RSS until it finds the least RSS, so on and so forth.
+
+# Let's apply this methodology to the ozone data.
+data(ozone)
+summary(ozone) # missing values have been removed for simplicity. If NA exist, you can partition missing value as a new level of factor.
+pairs(ozone, pch=".")
+
+# This correlation plots show several nonlinear relationships... so linear regression is not okay
+roz = rpart(O3 ~ ., ozone)
+
+# the first split (node 2 and 3) is on temperature.
+# node 2: temp < 67.5 contains 214 observations with mean value of 7.4 and RSS of 4114.
+# node 3: temp >= 67.5 contains 116 observations with mean value of 19.8 and RSS of 5478.
+
+# plot them
+plot(roz, margin = .1) # the depth of the branches is proportional to the reduction in RSS, but can be quite difficult to see
+text(roz)
+
+plot(roz, compress = T, uniform = T, branch = 0.4, margin = .1) # this is for equal spacing
+text(roz)
+
+## Diagnostics:
+plot(predict(roz), residuals(roz), xlab = "Fitted", ylab = "Residuals")
+qqnorm(residuals(roz))
+
+# there are no visible problems here.
+# Trees are somewhat sensitive to outliers and may be observed in the QQ plot.
+
+## Suppose we want to predict the response for new values (eg. median value in the dataset):
+x0 = apply(ozone[,-1], 2, median)
+x0
+
+predict(roz, data.frame(t(x0)))
+
+#
+#### 13.2 Tree Pruning ====
+## How to determine to correct tree size? One generic method: leave-one-out
+#cross validation (for a given tree, leave one observation, recalculate the
+#tree, and use the that tree to predict the left-out observation then calculate
+#the deviance or other measure). But that one is computationally expensive, so
+#the other method is k-fold cross-validation << but this is random and will
+#provide different results everytime you run it. Another way is to do
+#cost-complexity pruning. This is similar to backward elimination in linear
+#regression.
+
+roze = rpart(O3 ~ ., ozone, cp = 0.001) 
+printcp(roze)
+# In this tbale we see the value of the cp parameter, the number of splits in
+# the tree, the RSS of the tree divided by the RSS of the null tree, xerror
+# denotes the cross-validated error which is also scaled by the RSS of the null
+# tree. Since the partition of the data into 10 parts is random, this CV error
+# is also random. We can select the size of the tree by minimizing the value of
+# xerror and selecting the corresponding value of CP:
+rozr = prune.rpart(roze, 0.01091)
+
+# this turns out to be the same as the default choice.
+
+## Another method is to select the smallest tree with a CV error within one SE of the mimimum
+# in this case: 0.372 + 0.036 = 0.408
+
+plotcp(roz)
+post(roz, filename = "")
+
+## Let's compare the result of the earlier linear regression. We achieved an R^2
+#of about 70% using only size parameters in the previous chapter. We can select
+#a tree with five splits and hence effectively six parameters and compare them:
+
+rozr = prune.rpart(roz, 0.0154)
+1-(sum(residuals(rozr)^2)/sum((ozone$O3 - mean(ozone$O3))^2))
+## it's better than the linear model Of course it will be a mistake to
+#generalise from this, but this demonstrates that a piecewise fit can outperform
+#linear regression.
+
+#### 13.3 Classification Trees ====
+
+## This extends the function of regression tree to handle categorical data!!
+# several possible measures to determine least impurity:
+# 1. Deviance
+# 2. Entropy
+# 3. Gini index / Gini impurity (minimum impurity at 0) << this is the default of rpart function
+
+## Let's look at kangaroo data.
+# We have 148 cases with:
+# 3 possible species, sex, and 18 skull measurements
+
+## We will build the model separately, first we'll do species.
+data(kanga)
+x0 = c(1115, NA, 748, 182, NA, NA, 178, 311, 756, 226, NA, NA, NA, 48, 1009, NA, 204, 593)
+
+# We have missing values. We have two options: use only complete cases or include missing values.
+# First, we exclude the missing values. Also exclude sex cause we are not modelling it yet.
+kanga = kanga[, c(T, F, !is.na(x0))]
+head(kanga)
+
+## We still have missing values in the training set. Our options:
+# 1. Discretises predictors into factors and treats missing values as another level of the factors.
+# 2. Impute the missing values.
+# 3. Exclude missing values from the criterion.
+#    When we predict a new data with missing values then just follow down the tree until we reach the
+#    missing value then choose the majority.
+# 4. Leave out the missing cases entirely.
+
+## let's check the missing values:
+apply(kanga, 2, function(x) sum(is.na(x)))
+
+# the majority of missing values are from palate width and mandible length.
+# remove missing from those two variables and do pairwise correlations
+round(cor(kanga[, -1], use = "pairwise.complete.obs")[, c(3,9)], 2)
+
+# highly correlated with the rest of the data. We  can remove them and remove remaining missing cases:
+newko = na.omit(kanga[, -c(4,10)])
+dim(newko)
+
+# plot to see the overview:
+plot(foramina.length ~ zygomatic.width, data = newko, pch = substring(species, 1, 1))
+
+
+## rpart will automatically fit classification tree because the variable of interest is categorical.
+kt = rpart(species ~ ., newko, cp = 0.001)
+printcp(kt)
+
+# The cross-validated error (expressed in relative terms in the rel error column) reaches
+# a minimum for the six-split tree. We select this tree:
+ktp = prune(kt, cp = 0.0211)
+ktp
+
+# let's compute misclassification error
+tt = table(actual = newko$species, predicted = predict(ktp, type = "class"))
+tt
+
+1 - sum(diag(tt))/sum(tt)
+# 34% misclassification error...
+
+## We have such difficulty because we use one measure at a time to categorise the outcome.
+# Another possibility is to use Principal component score rather than the raw data.
+pck = princomp(newko[, -1])
+pcdf = data.frame(species = newko$species, pck$scores)
+kt = rpart(species ~ ., pcdf, cp = 0.001)
+printcp(kt)
+
+# Significantly smaller relative CV error (0.558). Before we can predict the test
+# case, we need to remove the missing values, unused variables, and apply
+# principal component transformation.
+nx0 = x0[!is.na(x0)]
+nx0 = nx0[-c(3,9)]
+nx0 = (nx0 - pck$center)/pck$scale
+nx0 %*% pck$loadings
+
+# our chosen tree is:
+ktp = prune.rpart(kt, 0.0421)
+ktp
+
+# Prediction
+tt = table(newko$species, predict(ktp, type = "class"))
+tt
+
+1 - sum(diag(tt))/sum(tt)
+# 25% misclassification rate!
+
+## curiosity: test multinomial model
+tempm = multinom(species ~ ., data = newko)
+summary(tempm)
+
+tt = table(newko$species, predict(tempm))
+tt
+1 - sum(diag(tt))/sum(tt) 
+# LOL multinomial model is even worse than principal component classification tree in this case.
+# I think this happened because of the non-linearity (multinomial assumption) in some of the predictors
+
+##### CH14: Neural Networks ####
+
+# page 296
+
 
 
