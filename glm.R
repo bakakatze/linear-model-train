@@ -2943,7 +2943,141 @@ tt
 
 ##### CH14: Neural Networks ####
 
-# page 296
+require(nnet)
+
+#
+#### 14.1 Statistical Models as NNs ====
+# just texts
+
+#### 14.2 NN Application ====
+
+data(ozone)
+
+# we start with 3 variables. We fit a feed-forward NN with one hiddne layer containin two units with a linear output:
+nnmdl = nnet(O3 ~ temp + ibh + ibt, ozone, size = 2, linout = T)
+
+# The final value = 21,115 = RSS
+
+# You will get diff results everytime due to random starting point of the
+# algorithm. It is hard when the variables have very different scales. So, let's
+# rescale the data.
+sx = scale(ozone)
+
+# Let's try repeat this 100x
+bestrss = 10e3
+# we want to find rss < 10e3
+
+for (i in 1:100) {
+  
+  nnmdl = nnet(O3 ~ temp + ibh + ibt, sx, size = 2, linout = T, trace = F)
+  cat(nnmdl$value, "\n")
+  if(nnmdl$value < bestrss){
+    bestnn = nnmdl
+    bestrss = nnmdl$value
+  }
+  
+}
+
+bestnn$value
+
+# examine the weights
+summary(bestnn)
+# the notation i2 -> h1 refers to the link between second input variable and the first hidden neurons
+# b = bias
+# we see there is one skip-layer connection: b -> o, from bias to output
+
+## Drawbacks of NN:
+# Their parameters are uninterpretable.
+# The bootstrap is a possible way of implementing statistical inference. The R2 for the fit is:
+1 - 88.03/sum((sx[,1]-mean(sx[,1]))^2)
+# 73%, which is very similar to the additive model fit
 
 
+## Althought NN may be difficult to interpret, we can get some sense of the effect of the predictors by
+# observing the marginal effect of changes in one or more predictors as other predictors are held fixed.
+
+# because the data have been centered, we need to restore the original scales.
+ozmeans = attributes(sx)$'scaled:center'
+ozscales = attributes(sx)$"scaled:scale"
+
+xx = expand.grid(temp = seq(-3, 3, 0.1), ibh = 0, ibt = 0)
+plot(xx$temp * ozscales['temp']+ozmeans['temp'] 
+     , predict(bestnn, new = xx) * ozscales['O3'] + ozmeans['O3'], 
+     xlab = "Temp", ylab = "O3")
+
+xx <- expand.grid(temp=0,ibh=seq(-3,3,0.1), ibt=0)
+plot(xx$ibh*ozscales['ibh']+ozmeans['ibh'],
+       predict(bestnn, new=xx)*ozscales['O3']+ozmeans['O3'],
+       xlab="IBH", ylab="O3")
+
+xx <- expand.grid(temp=0,ibh=0,ibt=seq(-3, 3, 0.1))
+plot(xx$ibt*ozscales['ibt']+ozmeans['ibt'],
+     predict(bestnn, new=xx)*ozscales['O3']+ozmeans['O3'],
+     xlab="IBT", ylab="O3")
+
+# we see surprising discontinuitise in the plots which do not seem consistent
+# with what we might expect for the effect of these predictors. This situation
+# is analogous to the collinearity problem in linear regression where
+# unreasonably large coefficients are often seen. The NN is choosing the extreme
+# weights in orer to optimize the fit, but the predictions will be unstable,
+# especially for extrapolations.
+
+## We can use a penalty function, as with smoothing with splines, to obtain a more stable fit.
+# Instead of minimising E, we minimise: E + lambda * sum(weight_i^2)
+
+# this is a weight decay. let's try lambda = 0.001 for 100 NN:
+bestrss = 10e3
+
+for(i in 1:100){
+  nnmdl <- nnet(O3 ~ temp+ibh+ibt, sx,
+                 size=2,linout=T,
+                 decay=0.001, trace=F)
+  cat(nnmdl$value,"\n")
+  if(nnmdl$value < bestrss){
+            bestnn <- nnmdl
+            bestrss <- nnmdl$value
+   }
+}
+
+bestnn$value
+# The RSS is somewhat larget and this is normal since weight decay sacrifices some fit to obtain a more stable result.
+# Not let's see the prediction again:
+xx = expand.grid(temp = seq(-3, 3, 0.1), ibh = 0, ibt = 0)
+plot(xx$temp * ozscales['temp']+ozmeans['temp'] 
+     , predict(bestnn, new = xx) * ozscales['O3'] + ozmeans['O3'], 
+     xlab = "Temp", ylab = "O3")
+
+xx <- expand.grid(temp=0,ibh=seq(-3,3,0.1), ibt=0)
+plot(xx$ibh*ozscales['ibh']+ozmeans['ibh'],
+     predict(bestnn, new=xx)*ozscales['O3']+ozmeans['O3'],
+     xlab="IBH", ylab="O3")
+
+xx <- expand.grid(temp=0,ibh=0,ibt=seq(-3, 3, 0.1))
+plot(xx$ibt*ozscales['ibt']+ozmeans['ibt'],
+     predict(bestnn, new=xx)*ozscales['O3']+ozmeans['O3'],
+     xlab="IBT", ylab="O3")
+
+# Much smoother.
+# NNs have interactions built in so one should also look at these.
+# Now, let's look at the full dataset. We use four hiddne uints because there are now more inputs.
+bestrss = 10e3
+for(i in 1:100){
+  
+  nnmdl = nnet(O3 ~ ., sx, size = 4, linout = T, trace = F)
+  cat(nnmdl$value, "\n")
+  if(nnmdl$value < bestrss) {
+    bestnn = nnmdl
+    bestrss = nnmdl$value
+  }
+}
+
+bestnn$value
+1 - bestnn$value/sum((sx[,1] - mean(sx[,1]))^2)
+# R2 at 85%, more hidden layers = better fit.
+
+# The R2 for the linear and tree model fits was substantially smaller, but these
+# approaches place a premium on simplicity and interpretability.
+# Finally, Multi-Adaptive Regression Splines (MARS) fit better and was also interpretable.
+
+# END
 
