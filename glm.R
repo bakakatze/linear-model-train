@@ -1,5 +1,4 @@
-## Tutorial for Linear Model and its extension by Faraway (2006)
-
+## Tutorial for Linear Model and its extension + Additional Stuff
 library(tidyverse)
 library(faraway)
 library(ggfortify)
@@ -3134,4 +3133,92 @@ bestnn$value
 # Finally, Multi-Adaptive Regression Splines (MARS) fit better and was also interpretable.
 
 # END
+
+
+
+
+
+
+
+##### XX15: Time Series Analysis ####
+
+
+#
+#### 15.1 ARIMA Model ====
+
+## Components in ARIMA:
+# Auto-Regressive (AR)
+# Differencing
+# Moving Average (MA)
+
+## The most important thing is to assess the auto-correlation function (ACF) and partial auto-correlation function (PACF)
+# this is an important step to specify your ARIMA model
+
+## NOTATIONS:
+# ARIMA(i,j,k)
+# i = i-th order AR
+# j = differencing (vertical adjustment of seasonality, because we need to make the time series stationary)
+# k = k-th order MA
+
+
+# simulate 150 from Moving Average (1) model
+acfma1 = ARMAacf(ma = c(0.7), lag.max = 10)
+lags = 0:10
+plot(lags, acfma1, xlim = c(1,10), ylab = "r", type ="h", main = "ACF for MA(1) with theta1 = 0.7")
+abline(h=0)
+
+xc = arima.sim(n = 150, list(ma=c(0.7)))
+
+x = xc+10 #mean = 10
+plot(x, type = "b", main = "Simulated MA(1) data")
+acf(x, xlim = c(1,10), main = "ACF for simulated sample data")
+
+
+# simulate 150 from Moving Average (2) model
+acfma2 = ARMAacf(ma = c(0.5, 0.3), lag.max = 10)
+acfma2
+
+plot(lags, acfma2, xlim = c(1,10), ylab = "r", type= "h", main = "ACF for MA(2)")
+abline(h=0)
+
+xc = arima.sim(n = 150, list(ma = c(0.5, 0.3)))
+x = xc+10
+
+plot(x, type = "b", main = "Simulated MA(2) Series")
+acf(x, xlim = c(1,10), main = "ACF for simulated MA(2) Data")
+
+# we can plot PACF:
+ma1pacf = ARMAacf(ma = c(0.7), lag.max = 36, pacf = TRUE)
+plot(ma1pacf, type = "h")
+
+#
+#### 15.2 Seasonal ARIMA ====
+
+## Seasonal ARIMA is just multiplying the regular ARIMA with it's seasonal components
+# the PACF will look like this:
+thepacf = ARMAacf(ar = c(.6,0,0,0,0,0,0,0,0,0,0,.5,-.30), lag.max=30, pacf=T)
+plot(thepacf, type = "h")
+# the spikes at lags 1, 12, and 13; then cuts off after lag 13 <<< typical ARIMA(1,0,0)X(1,0,0)_12
+
+
+## Step 1: do a time series plot
+
+## Step 2: do any necessary differencing. If there is no obvious differencing, don't take any.
+
+diff12=diff(x, 12)
+plot(diff12)
+acf(diff12)
+pacf(diff12)
+
+## Step 3: Examine the ACF and PACF of the differenced data non-seasonal terms:
+# [Non-seasonal terms] examine the early lags(1,2,3,..) to judge non-seasonal terms. spikes in the ACF
+# (at low lags) indicate non-seasonal AR terms. Spikes in the PACF (at low lags)
+# indicated possible non-seasonal MA terms.
+# [Seasonal Terms] Examine pattern across lags that are mutliples of S (seasonal lags).
+# Judge the ACF and PACF at the seasonal lags in the same way you do for earlier lags.
+
+## Step 4: specify the parameters
+
+## Step 5: examine the residuals (with ACF, Box-Pierce, etc.). Compare AIC and BIC if there are multiple models.
+
 
