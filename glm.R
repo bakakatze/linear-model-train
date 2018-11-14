@@ -3221,4 +3221,63 @@ pacf(diff12)
 
 ## Step 5: examine the residuals (with ACF, Box-Pierce, etc.). Compare AIC and BIC if there are multiple models.
 
+#### 15.X: Example of Time Series Data ====
+## Data: Age of death of successive kings of England
+kings <- scan("http://robjhyndman.com/tsdldata/misc/kings.dat", skip=3)
+kings
+kingstimeseries = ts(kings)
+
+## Data: number of births per month
+births <- scan("http://robjhyndman.com/tsdldata/data/nybirths.dat")
+birthstimeseries <- ts(births, frequency=12, start=c(1946,1))
+
+## Data: Monthly sales for a souvenir shop at a beach resort town in Queensland, Australia
+souvenir <- scan("http://robjhyndman.com/tsdldata/data/fancy.dat")
+souvenirtimeseries <- ts(souvenir, frequency=12, start=c(1987,1))
+
+
+# plotting them:
+plot(kingstimeseries)
+plot(birthstimeseries)
+
+plot(souvenirtimeseries)
+# this souvenir sales case: it appears that an additive model is not approproate for describing this time series
+# since the size of the seasonal fluctuations and random fluctuations seem to increase with the level of the time series.
+# Thus we may need to transform the data into something that can be described using an additive model.
+
+logsouvenirtimeseries = log(souvenirtimeseries)
+plot(logsouvenirtimeseries)
+# Here we see that the seasonal fluctuations and random fluctuations does not depend on the level of the time series.
+# Thus, we may be able to described this using an additive model.
+
+
+plot(birthstimeseries)
+diffbirth = diff(birthstimeseries, 12) # cause there is a clear 12-monthly seasonal difference
+acf2(diffbirth,48) #acf and pacf with 48 lags
+
+### use 'astsa' package, compact premade package to do plotting and diagnostics of ARIMA
+require(astsa)
+
+## Now, we fit a seasonal arima model: ARIMA(1,0,0)X(0,1,1)12
+sarima(birthstimeseries, 1,0,0,0,1,1,12)
+# this seems to have the best fit
+
+## We can do forecast:
+sarima.for(birthstimeseries, 24, 1,0,0,0,1,1,12)
+
+
+## These chunks if you were to do it in native R language
+themodel = arima(birthstimeseries, order = c(1,0,0), seasonal = list(order = c(0,1,1), period = 12))
+themodel
+predict(themodel, n.ahead = 24)
+
+
+## monthly means
+birthm = matrix(birthstimeseries, ncol = 12, byrow = TRUE)
+col.means = apply(birthm, 2, mean)
+plot(col.means, type = "b", main = "Monthly Means Plot for Birth Counts", xlab = "Month", ylab = "Mean Birth Counts")
+
+## continue to STAT 510 - decomposing
+
+
 
